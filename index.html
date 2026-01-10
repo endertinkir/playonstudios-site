@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Play On Studios</title>
+  <meta name="description" content="Play On Studios is an independent mobile game studio focused on casual and puzzle experiences." />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#0b1220; color:#eef2ff; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 56px 20px; }
+    .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 28px; }
+    a { color:#a5b4fc; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; background:rgba(165,180,252,0.15); border:1px solid rgba(165,180,252,0.3); margin-right:8px; }
+    footer { margin-top: 18px; opacity: 0.85; font-size: 14px; }
+    h1 { margin: 0 0 8px; font-size: 40px; }
+    p { line-height: 1.55; }
+    nav { margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <span class="pill">Indie</span>
+      <span class="pill">Mobile</span>
+      <span class="pill">Puzzle</span>
+
+      <h1>Play On Studios</h1>
+      <p>
+        We are an independent mobile game studio focused on polished, player-first casual experiences.
+      </p>
+
+      <nav>
+        <a href="/privacy.html">Privacy Policy</a> ·
+        <a href="/support.html">Support</a>
+      </nav>
+
+      <footer>
+        Contact: <a href="mailto:hello@playonstudios.co">hello@playonstudios.co</a><br/>
+        © <span id="y"></span> Play On Studios
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById("y").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
