@@ -10,27 +10,54 @@
     .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 28px; }
     a { color:#a5b4fc; }
     li { line-height:1.6; }
+    .lang-selector { margin-bottom: 20px; }
+    .lang-selector select {
+      padding: 8px 32px 8px 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.06);
+      color: #eef2ff;
+      font-size: 14px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>Support</h1>
+      <div class="lang-selector">
+        <select id="langSelector" aria-label="Select Language">
+          <option value="en">🇬🇧 English</option>
+          <option value="de">🇩🇪 Deutsch</option>
+          <option value="es">🇪🇸 Español</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="it">🇮🇹 Italiano</option>
+          <option value="pt">🇵🇹 Português</option>
+          <option value="tr">🇹🇷 Türkçe</option>
+          <option value="ja">🇯🇵 日本語</option>
+          <option value="ko">🇰🇷 한국어</option>
+          <option value="ru">🇷🇺 Русский</option>
+          <option value="ar">🇸🇦 العربية</option>
+        </select>
+      </div>
+      <h1 data-i18n="supportTitle">Support</h1>
       <p>
-        Need help? Contact us at <a href="mailto:hello@playonstudios.co">hello@playonstudios.co</a>.
+        <span data-i18n="supportIntro">Need help? Contact us at</span> <a href="mailto:hello@playonstudios.co">hello@playonstudios.co</a>.
       </p>
 
-      <p>To help us resolve issues faster, please include:</p>
+      <p data-i18n="supportHelp">To help us resolve issues faster, please include:</p>
       <ul>
-        <li>Game name</li>
-        <li>Device model and OS version</li>
-        <li>App version</li>
-        <li>What happened + steps to reproduce</li>
-        <li>Screenshots or screen recording (if possible)</li>
+        <li data-i18n="supportItem1">Game name</li>
+        <li data-i18n="supportItem2">Device model and OS version</li>
+        <li data-i18n="supportItem3">App version</li>
+        <li data-i18n="supportItem4">What happened + steps to reproduce</li>
+        <li data-i18n="supportItem5">Screenshots or screen recording (if possible)</li>
       </ul>
 
-      <p><a href="/index.html">← Back to home</a></p>
+      <p><a href="/index.html" data-i18n="backToHome">← Back to home</a></p>
     </div>
   </div>
+  <script src="/translations.js"></script>
+  <script src="/translations-extended.js"></script>
 </body>
 </html>

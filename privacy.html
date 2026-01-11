@@ -12,70 +12,104 @@
     h1 { margin-top:0; }
     p, li { line-height: 1.6; }
     code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 6px; }
+    .lang-selector { margin-bottom: 20px; }
+    .lang-selector select {
+      padding: 8px 32px 8px 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.06);
+      color: #eef2ff;
+      font-size: 14px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>Privacy Policy</h1>
-      <p><strong>Last updated:</strong> <span id="d"></span></p>
+      <div class="lang-selector">
+        <select id="langSelector" aria-label="Select Language">
+          <option value="en">🇬🇧 English</option>
+          <option value="de">🇩🇪 Deutsch</option>
+          <option value="es">🇪🇸 Español</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="it">🇮🇹 Italiano</option>
+          <option value="pt">🇵🇹 Português</option>
+          <option value="tr">🇹🇷 Türkçe</option>
+          <option value="ja">🇯🇵 日本語</option>
+          <option value="ko">🇰🇷 한국어</option>
+          <option value="ru">🇷🇺 Русский</option>
+          <option value="ar">🇸🇦 العربية</option>
+        </select>
+      </div>
+      <h1 data-i18n="privacyTitle">Privacy Policy</h1>
+      <p><strong data-i18n="privacyLastUpdated">Last updated:</strong> <span id="d"></span></p>
 
-      <p>
-        This Privacy Policy explains how <strong>Play On Studios</strong> (“we”, “us”) collects and uses information
+      <p data-i18n="privacyIntro">
+        This Privacy Policy explains how <strong>Play On Studios</strong> ("we", "us") collects and uses information
         when you use our mobile games and related services.
       </p>
 
-      <h2>Information we may collect</h2>
+      <h2 data-i18n="privacyInfo1Title">Information we may collect</h2>
       <ul>
-        <li><strong>Device and app information</strong> (e.g., device model, OS version, app version, language, country).</li>
-        <li><strong>Gameplay events</strong> (e.g., level starts/completions, session activity) to improve game experience.</li>
-        <li><strong>Crash and performance data</strong> to diagnose issues and improve stability.</li>
-        <li><strong>Advertising data</strong> (e.g., ad impressions, interactions) if ads are shown in the game.</li>
+        <li data-i18n="privacyInfo1Item1"><strong>Device and app information</strong> (e.g., device model, OS version, app version, language, country).</li>
+        <li data-i18n="privacyInfo1Item2"><strong>Gameplay events</strong> (e.g., level starts/completions, session activity) to improve game experience.</li>
+        <li data-i18n="privacyInfo1Item3"><strong>Crash and performance data</strong> to diagnose issues and improve stability.</li>
+        <li data-i18n="privacyInfo1Item4"><strong>Advertising data</strong> (e.g., ad impressions, interactions) if ads are shown in the game.</li>
       </ul>
 
-      <h2>How we use information</h2>
+      <h2 data-i18n="privacyInfo2Title">How we use information</h2>
       <ul>
-        <li>To provide and improve the game, balance difficulty, and enhance user experience.</li>
-        <li>To analyze performance and fix bugs.</li>
-        <li>To measure advertising performance (if applicable).</li>
+        <li data-i18n="privacyInfo2Item1">To provide and improve the game, balance difficulty, and enhance user experience.</li>
+        <li data-i18n="privacyInfo2Item2">To analyze performance and fix bugs.</li>
+        <li data-i18n="privacyInfo2Item3">To measure advertising performance (if applicable).</li>
       </ul>
 
-      <h2>Third-party services</h2>
-      <p>
+      <h2 data-i18n="privacyInfo3Title">Third-party services</h2>
+      <p data-i18n="privacyInfo3Para1">
         Our games may use third-party services that collect information to provide analytics and advertising, such as:
       </p>
       <ul>
-        <li>Google Firebase (Analytics / Crash reporting)</li>
-        <li>Google AdMob (Advertising)</li>
+        <li data-i18n="privacyInfo3Item1">Google Firebase (Analytics / Crash reporting)</li>
+        <li data-i18n="privacyInfo3Item2">Google AdMob (Advertising)</li>
       </ul>
-      <p>
+      <p data-i18n="privacyInfo3Para2">
         These services may collect information as described in their own privacy policies.
       </p>
 
-      <h2>Your choices</h2>
-      <p>
+      <h2 data-i18n="privacyInfo4Title">Your choices</h2>
+      <p data-i18n="privacyInfo4Para">
         You may limit certain data collection through your device settings (e.g., advertising preferences).
         If required by law, we may show consent prompts in-app.
       </p>
 
-      <h2>Children’s privacy</h2>
-      <p>
+      <h2 data-i18n="privacyInfo5Title">Children's privacy</h2>
+      <p data-i18n="privacyInfo5Para">
         Our games are not directed to children under 13. If you believe a child has provided personal information,
         please contact us and we will take appropriate steps.
       </p>
 
-      <h2>Contact</h2>
-      <p>
+      <h2 data-i18n="privacyContactTitle">Contact</h2>
+      <p data-i18n="privacyContactPara">
         If you have questions about this policy, contact us at:
         <a href="mailto:hello@playonstudios.co">hello@playonstudios.co</a>
       </p>
 
-      <p><a href="/index.html">← Back to home</a></p>
+      <p><a href="/index.html" data-i18n="backToHome">← Back to home</a></p>
     </div>
   </div>
 
+  <script src="/translations.js"></script>
+  <script src="/translations-extended.js"></script>
   <script>
     document.getElementById("d").textContent = new Date().toISOString().slice(0,10);
+    
+    // Initialize language system after DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initLanguage);
+    } else {
+      initLanguage();
+    }
   </script>
 </body>
 </html>
