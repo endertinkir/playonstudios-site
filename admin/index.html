@@ -6,15 +6,24 @@
   <title>Play On Studios Admin</title>
   <meta
     name="description"
-    content="Private Play On Studios dashboard for tracking game performance, manual reporting, and release notes."
+    content="Private Play On Studios dashboard for tracking game performance, player cohorts and marketing KPIs."
   />
   <meta name="robots" content="noindex, nofollow" />
-  <meta name="theme-color" content="#08111c" />
+  <meta name="theme-color" content="#05080f" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/admin/admin.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
   <script type="module" src="/admin/admin.js"></script>
 </head>
 <body class="page-admin">
+  <div class="aurora" aria-hidden="true">
+    <span class="aurora-blob aurora-blob-a"></span>
+    <span class="aurora-blob aurora-blob-b"></span>
+    <span class="aurora-blob aurora-blob-c"></span>
+  </div>
+
   <div class="admin-gate" id="authGate" hidden>
     <div class="admin-gate-card">
       <p class="eyebrow">Protected Area</p>
@@ -27,11 +36,17 @@
     <header class="admin-topbar">
       <a class="brandmark" href="/index.html" aria-label="Play On Studios home">
         <span class="brandmark-badge" aria-hidden="true">P</span>
-        <span class="brandmark-text">Play On Studios</span>
+        <div class="brandmark-stack">
+          <span class="brandmark-text">Play On Studios</span>
+          <span class="brandmark-sub">Insights console</span>
+        </div>
       </a>
 
       <div class="admin-topbar-meta">
-        <div class="admin-status" id="sessionBadge">Setup required</div>
+        <div class="admin-status" id="sessionBadge">
+          <span class="admin-status-dot" aria-hidden="true"></span>
+          <span id="sessionBadgeLabel">Setup required</span>
+        </div>
         <button class="button button-secondary admin-logout" id="logoutButton" type="button" hidden>Log out</button>
       </div>
     </header>
@@ -76,8 +91,9 @@
         <section class="panel filter-panel">
           <div class="panel-head">
             <div>
-              <p class="section-kicker">Dashboard Filters</p>
-              <h2>Track player activity from Firestore.</h2>
+              <p class="section-kicker">Dashboard</p>
+              <h2>Live operator view</h2>
+              <p class="panel-sub">Segment players, track progression and watch marketing performance in one place.</p>
             </div>
             <div class="panel-meta" id="dataFreshness">Not synced yet</div>
           </div>
@@ -87,6 +103,7 @@
               <span>Quick range</span>
               <select id="rangePreset">
                 <option value="7">Last 7 days</option>
+                <option value="14">Last 14 days</option>
                 <option value="30" selected>Last 30 days</option>
                 <option value="90">Last 90 days</option>
                 <option value="365">Last 365 days</option>
@@ -112,125 +129,532 @@
               </select>
             </label>
 
-            <button class="button button-secondary filter-action" id="refreshButton" type="button">Refresh</button>
+            <label class="field">
+              <span>Cohort</span>
+              <select id="segmentFilter">
+                <option value="all">All players</option>
+                <option value="whale">Whales (L50+, heavy)</option>
+                <option value="pro">Pro (L20–49)</option>
+                <option value="casual">Casual (L5–19)</option>
+                <option value="beginner">Beginner (L0–4)</option>
+                <option value="active7">Active last 7d</option>
+                <option value="churnrisk">Churn risk (&gt;14d idle)</option>
+              </select>
+            </label>
+
+            <button class="button button-secondary filter-action" id="refreshButton" type="button">
+              <span class="button-spinner" aria-hidden="true"></span>
+              Refresh
+            </button>
           </div>
 
-          <p class="panel-feedback">Source: <code>users</code> collection. Metrics are derived from <code>updatedAt</code>, <code>lastSeenPlatform</code>, <code>level</code>, <code>hintCount</code>, <code>shuffleCount</code>, <code>undoCount</code>, and <code>toolsUnlockedCount</code>.</p>
+          <p class="panel-feedback">Source: <code>users</code> + <code>studioDailyMetrics</code>. Player cohorts are derived from <code>level</code>, power usage and <code>updatedAt</code>; marketing metrics come from daily entries.</p>
         </section>
 
-        <section class="admin-card-grid">
-          <article class="panel metric-card">
-            <span class="metric-label">Total Profiles</span>
-            <strong class="metric-value" id="kpiTotalProfiles">0</strong>
-            <span class="metric-caption">All player documents matching the selected platform filter</span>
-          </article>
+        <nav class="tab-nav" role="tablist" aria-label="Dashboard sections">
+          <button class="tab-nav-item is-active" type="button" role="tab" data-tab="overview" aria-selected="true">
+            <span class="tab-dot" aria-hidden="true"></span>
+            Overview
+          </button>
+          <button class="tab-nav-item" type="button" role="tab" data-tab="users" aria-selected="false">
+            <span class="tab-dot" aria-hidden="true"></span>
+            Users
+          </button>
+          <button class="tab-nav-item" type="button" role="tab" data-tab="levels" aria-selected="false">
+            <span class="tab-dot" aria-hidden="true"></span>
+            Levels
+          </button>
+          <button class="tab-nav-item" type="button" role="tab" data-tab="marketing" aria-selected="false">
+            <span class="tab-dot" aria-hidden="true"></span>
+            Marketing
+          </button>
+        </nav>
 
-          <article class="panel metric-card">
-            <span class="metric-label">Active In Range</span>
-            <strong class="metric-value" id="kpiActiveProfiles">0</strong>
-            <span class="metric-caption">Profiles updated during the selected date range</span>
-          </article>
+        <!-- ==================== OVERVIEW TAB ==================== -->
+        <section class="tab-pane is-active" data-pane="overview" role="tabpanel">
+          <section class="kpi-strip">
+            <article class="panel kpi-card kpi-tone-gold">
+              <div class="kpi-head">
+                <span class="kpi-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M6 17V9"/><path d="M12 17V5"/><path d="M18 17v-7"/></svg>
+                </span>
+                <span class="kpi-label">Total Profiles</span>
+              </div>
+              <strong class="kpi-value" id="kpiTotalProfiles">0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-delta" id="kpiTotalProfilesDelta">—</span>
+                <span class="kpi-caption">All player documents</span>
+              </div>
+            </article>
 
-          <article class="panel metric-card">
-            <span class="metric-label">Average Level</span>
-            <strong class="metric-value" id="kpiAvgLevel">0</strong>
-            <span class="metric-caption">Average player level among active profiles</span>
-          </article>
+            <article class="panel kpi-card kpi-tone-blue">
+              <div class="kpi-head">
+                <span class="kpi-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                </span>
+                <span class="kpi-label">Active in Range</span>
+              </div>
+              <strong class="kpi-value" id="kpiActiveProfiles">0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-delta" id="kpiActiveProfilesDelta">—</span>
+                <span class="kpi-caption">Updated within selected window</span>
+              </div>
+            </article>
 
-          <article class="panel metric-card">
-            <span class="metric-label">Avg Power Uses</span>
-            <strong class="metric-value" id="kpiAvgPowerUses">0</strong>
-            <span class="metric-caption">Average total hints, shuffles and undos per active profile</span>
-          </article>
+            <article class="panel kpi-card kpi-tone-green">
+              <div class="kpi-head">
+                <span class="kpi-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-8"/><path d="M22 20H2"/></svg>
+                </span>
+                <span class="kpi-label">Avg Level</span>
+              </div>
+              <strong class="kpi-value" id="kpiAvgLevel">0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-delta" id="kpiAvgLevelDelta">—</span>
+                <span class="kpi-caption">Mean among active players</span>
+              </div>
+            </article>
 
-          <article class="panel metric-card">
-            <span class="metric-label">Avg Tools Unlocked</span>
-            <strong class="metric-value" id="kpiAvgToolsUnlocked">0</strong>
-            <span class="metric-caption">Average unlocked tools among active profiles</span>
-          </article>
+            <article class="panel kpi-card kpi-tone-violet">
+              <div class="kpi-head">
+                <span class="kpi-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                </span>
+                <span class="kpi-label">Engagement Score</span>
+              </div>
+              <strong class="kpi-value" id="kpiEngagement">0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-delta" id="kpiEngagementDelta">—</span>
+                <span class="kpi-caption">Weighted level × power use</span>
+              </div>
+            </article>
+
+            <article class="panel kpi-card kpi-tone-rose">
+              <div class="kpi-head">
+                <span class="kpi-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="M17 5H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H7"/></svg>
+                </span>
+                <span class="kpi-label">Revenue</span>
+              </div>
+              <strong class="kpi-value" id="kpiRevenue">$0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-delta" id="kpiRevenueDelta">—</span>
+                <span class="kpi-caption">Ad + IAP in window</span>
+              </div>
+            </article>
+          </section>
+
+          <section class="admin-grid">
+            <article class="panel chart-panel chart-span-2">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Activity Trend</p>
+                  <h2>Daily active players</h2>
+                </div>
+                <div class="chip-group" id="trendChips">
+                  <button type="button" class="chip is-active" data-trend="users">Players</button>
+                  <button type="button" class="chip" data-trend="revenue">Revenue</button>
+                  <button type="button" class="chip" data-trend="downloads">Downloads</button>
+                </div>
+              </div>
+              <canvas id="trendChart" aria-label="Daily active trend"></canvas>
+            </article>
+
+            <article class="panel chart-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Platform Split</p>
+                  <h2>Active by platform</h2>
+                </div>
+              </div>
+              <canvas id="platformChart" aria-label="Platform split"></canvas>
+              <div class="legend-list" id="platformLegend"></div>
+            </article>
+          </section>
+
+          <section class="admin-grid">
+            <article class="panel table-panel chart-span-2">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Platform Breakdown</p>
+                  <h2>Active user summary</h2>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Platform</th>
+                      <th class="num">Profiles</th>
+                      <th class="num">Share</th>
+                      <th class="num">Avg Level</th>
+                      <th class="num">Avg Power Uses</th>
+                      <th class="num">Avg Tools</th>
+                    </tr>
+                  </thead>
+                  <tbody id="summaryTableBody"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="panel insight-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Quick Pulse</p>
+                  <h2>Health signals</h2>
+                </div>
+              </div>
+              <ul class="pulse-list" id="pulseList"></ul>
+            </article>
+          </section>
         </section>
 
-        <section class="admin-grid">
-          <article class="panel chart-panel chart-span-2">
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">Activity Trend</p>
-                <h2>Profiles updated per day</h2>
+        <!-- ==================== USERS TAB ==================== -->
+        <section class="tab-pane" data-pane="users" role="tabpanel" hidden>
+          <section class="segment-grid">
+            <article class="panel segment-card segment-whale">
+              <span class="segment-icon">👑</span>
+              <span class="segment-label">Whales</span>
+              <strong class="segment-value" id="segWhales">0</strong>
+              <span class="segment-caption">Level 50+ & heavy power usage</span>
+              <div class="segment-bar"><span id="segWhalesBar"></span></div>
+            </article>
+            <article class="panel segment-card segment-pro">
+              <span class="segment-icon">⚡</span>
+              <span class="segment-label">Pro</span>
+              <strong class="segment-value" id="segPro">0</strong>
+              <span class="segment-caption">Level 20–49, engaged</span>
+              <div class="segment-bar"><span id="segProBar"></span></div>
+            </article>
+            <article class="panel segment-card segment-casual">
+              <span class="segment-icon">🎯</span>
+              <span class="segment-label">Casual</span>
+              <strong class="segment-value" id="segCasual">0</strong>
+              <span class="segment-caption">Level 5–19</span>
+              <div class="segment-bar"><span id="segCasualBar"></span></div>
+            </article>
+            <article class="panel segment-card segment-beginner">
+              <span class="segment-icon">🌱</span>
+              <span class="segment-label">Beginner</span>
+              <strong class="segment-value" id="segBeginner">0</strong>
+              <span class="segment-caption">Level 0–4, onboarding</span>
+              <div class="segment-bar"><span id="segBeginnerBar"></span></div>
+            </article>
+            <article class="panel segment-card segment-churn">
+              <span class="segment-icon">⏳</span>
+              <span class="segment-label">Churn Risk</span>
+              <strong class="segment-value" id="segChurn">0</strong>
+              <span class="segment-caption">Idle &gt; 14 days</span>
+              <div class="segment-bar"><span id="segChurnBar"></span></div>
+            </article>
+          </section>
+
+          <section class="admin-grid">
+            <article class="panel chart-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Power Usage</p>
+                  <h2>Hints · shuffles · undos</h2>
+                </div>
               </div>
-            </div>
-            <canvas id="trendChart" aria-label="Daily active profile trend"></canvas>
-          </article>
+              <canvas id="powerChart" aria-label="Power usage breakdown"></canvas>
+            </article>
 
-          <article class="panel chart-panel">
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">Platform Split</p>
-                <h2>Active profiles by platform</h2>
+            <article class="panel chart-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Tools Unlocked</p>
+                  <h2>Unlock distribution</h2>
+                </div>
               </div>
-            </div>
-            <canvas id="platformChart" aria-label="Platform split"></canvas>
-          </article>
+              <canvas id="toolsChart" aria-label="Tools unlocked distribution"></canvas>
+            </article>
 
-          <article class="panel chart-panel">
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">Progression</p>
-                <h2>Level distribution</h2>
+            <article class="panel chart-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Recency</p>
+                  <h2>Last active buckets</h2>
+                </div>
               </div>
-            </div>
-            <canvas id="levelChart" aria-label="Level distribution"></canvas>
-          </article>
+              <canvas id="recencyChart" aria-label="Recency distribution"></canvas>
+            </article>
+          </section>
 
-          <article class="panel table-panel">
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">Platform Breakdown</p>
-                <h2>Active user summary</h2>
+          <section class="admin-grid">
+            <article class="panel table-panel chart-span-3">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Top Players</p>
+                  <h2>Highest engagement in window</h2>
+                </div>
+                <div class="chip-group" id="topPlayersChips">
+                  <button type="button" class="chip is-active" data-top="engagement">Engagement</button>
+                  <button type="button" class="chip" data-top="level">Level</button>
+                  <button type="button" class="chip" data-top="powers">Powers</button>
+                </div>
               </div>
-            </div>
-
-            <div class="table-wrap">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Platform</th>
-                    <th>Profiles</th>
-                    <th>Avg Level</th>
-                    <th>Avg Power Uses</th>
-                    <th>Avg Tools</th>
-                  </tr>
-                </thead>
-                <tbody id="summaryTableBody"></tbody>
-              </table>
-            </div>
-          </article>
-
-          <article class="panel table-panel chart-span-2">
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">Recent Players</p>
-                <h2>Recently updated profiles</h2>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>User ID</th>
+                      <th>Segment</th>
+                      <th>Platform</th>
+                      <th class="num">Level</th>
+                      <th class="num">Hints</th>
+                      <th class="num">Shuffles</th>
+                      <th class="num">Undos</th>
+                      <th class="num">Tools</th>
+                      <th class="num">Score</th>
+                      <th>Last Active</th>
+                    </tr>
+                  </thead>
+                  <tbody id="topPlayersTableBody"></tbody>
+                </table>
               </div>
-            </div>
+            </article>
+          </section>
+        </section>
 
-            <div class="table-wrap">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>User ID</th>
-                    <th>Platform</th>
-                    <th>Level</th>
-                    <th>Hints</th>
-                    <th>Shuffles</th>
-                    <th>Undos</th>
-                    <th>Tools</th>
-                    <th>Updated</th>
-                  </tr>
-                </thead>
-                <tbody id="recentUsersTableBody"></tbody>
-              </table>
-            </div>
-          </article>
+        <!-- ==================== LEVELS TAB ==================== -->
+        <section class="tab-pane" data-pane="levels" role="tabpanel" hidden>
+          <section class="kpi-strip kpi-strip-4">
+            <article class="panel kpi-card kpi-tone-green">
+              <div class="kpi-head">
+                <span class="kpi-label">Avg Level</span>
+              </div>
+              <strong class="kpi-value" id="kpiLvlAvg">0</strong>
+              <span class="kpi-caption">Active players</span>
+            </article>
+            <article class="panel kpi-card kpi-tone-blue">
+              <div class="kpi-head">
+                <span class="kpi-label">Median Level</span>
+              </div>
+              <strong class="kpi-value" id="kpiLvlMedian">0</strong>
+              <span class="kpi-caption">Midpoint of cohort</span>
+            </article>
+            <article class="panel kpi-card kpi-tone-violet">
+              <div class="kpi-head">
+                <span class="kpi-label">Top Quartile</span>
+              </div>
+              <strong class="kpi-value" id="kpiLvlP75">0</strong>
+              <span class="kpi-caption">75th percentile</span>
+            </article>
+            <article class="panel kpi-card kpi-tone-gold">
+              <div class="kpi-head">
+                <span class="kpi-label">Max Level</span>
+              </div>
+              <strong class="kpi-value" id="kpiLvlMax">0</strong>
+              <span class="kpi-caption">Highest reached</span>
+            </article>
+          </section>
+
+          <section class="admin-grid">
+            <article class="panel chart-panel chart-span-2">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Distribution</p>
+                  <h2>Level histogram</h2>
+                </div>
+              </div>
+              <canvas id="levelChart" aria-label="Level distribution"></canvas>
+            </article>
+
+            <article class="panel chart-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Progression Funnel</p>
+                  <h2>Reach by stage</h2>
+                </div>
+              </div>
+              <div class="funnel" id="progressionFunnel"></div>
+            </article>
+          </section>
+
+          <section class="admin-grid">
+            <article class="panel chart-panel chart-span-2">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Power Usage per Bucket</p>
+                  <h2>How reliance changes with level</h2>
+                </div>
+              </div>
+              <canvas id="powerPerLevelChart" aria-label="Power uses by level bucket"></canvas>
+            </article>
+
+            <article class="panel table-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Level Cohorts</p>
+                  <h2>Bucket summary</h2>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Bucket</th>
+                      <th class="num">Players</th>
+                      <th class="num">Share</th>
+                      <th class="num">Avg Powers</th>
+                      <th class="num">Avg Tools</th>
+                    </tr>
+                  </thead>
+                  <tbody id="levelCohortBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <!-- ==================== MARKETING TAB ==================== -->
+        <section class="tab-pane" data-pane="marketing" role="tabpanel" hidden>
+          <section class="kpi-strip kpi-strip-6">
+            <article class="panel kpi-card kpi-tone-gold">
+              <div class="kpi-head">
+                <span class="kpi-label">Total Revenue</span>
+              </div>
+              <strong class="kpi-value" id="mkRevenue">$0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-delta" id="mkRevenueDelta">—</span>
+                <span class="kpi-caption">Ad + IAP</span>
+              </div>
+            </article>
+            <article class="panel kpi-card kpi-tone-violet">
+              <div class="kpi-head">
+                <span class="kpi-label">Ad Spend</span>
+              </div>
+              <strong class="kpi-value" id="mkSpend">$0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-delta" id="mkSpendDelta">—</span>
+                <span class="kpi-caption">Campaign cost</span>
+              </div>
+            </article>
+            <article class="panel kpi-card kpi-tone-green">
+              <div class="kpi-head">
+                <span class="kpi-label">ROAS</span>
+              </div>
+              <strong class="kpi-value" id="mkRoas">—</strong>
+              <div class="kpi-foot">
+                <span class="kpi-delta" id="mkRoasDelta">—</span>
+                <span class="kpi-caption">Revenue ÷ spend</span>
+              </div>
+            </article>
+            <article class="panel kpi-card kpi-tone-blue">
+              <div class="kpi-head">
+                <span class="kpi-label">Downloads</span>
+              </div>
+              <strong class="kpi-value" id="mkDownloads">0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-delta" id="mkDownloadsDelta">—</span>
+                <span class="kpi-caption">In window</span>
+              </div>
+            </article>
+            <article class="panel kpi-card kpi-tone-rose">
+              <div class="kpi-head">
+                <span class="kpi-label">CPI</span>
+              </div>
+              <strong class="kpi-value" id="mkCpi">$0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-caption">Spend ÷ downloads</span>
+              </div>
+            </article>
+            <article class="panel kpi-card kpi-tone-teal">
+              <div class="kpi-head">
+                <span class="kpi-label">ARPDAU</span>
+              </div>
+              <strong class="kpi-value" id="mkArpdau">$0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-caption">Revenue ÷ avg DAU</span>
+              </div>
+            </article>
+          </section>
+
+          <section class="admin-grid">
+            <article class="panel chart-panel chart-span-2">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Revenue Composition</p>
+                  <h2>Ad vs IAP over time</h2>
+                </div>
+              </div>
+              <canvas id="revenueStackChart" aria-label="Revenue composition"></canvas>
+            </article>
+
+            <article class="panel chart-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Spend vs Revenue</p>
+                  <h2>Campaign efficiency</h2>
+                </div>
+              </div>
+              <canvas id="spendRevenueChart" aria-label="Spend vs revenue"></canvas>
+            </article>
+          </section>
+
+          <section class="admin-grid">
+            <article class="panel chart-panel chart-span-2">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Engagement</p>
+                  <h2>DAU / MAU stickiness</h2>
+                </div>
+              </div>
+              <canvas id="stickinessChart" aria-label="DAU MAU stickiness"></canvas>
+            </article>
+
+            <article class="panel table-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Platform Performance</p>
+                  <h2>By channel</h2>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Platform</th>
+                      <th class="num">Revenue</th>
+                      <th class="num">Spend</th>
+                      <th class="num">ROAS</th>
+                      <th class="num">Installs</th>
+                    </tr>
+                  </thead>
+                  <tbody id="marketingPlatformBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+
+          <section class="admin-grid">
+            <article class="panel table-panel chart-span-3">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Games</p>
+                  <h2>Title-level performance</h2>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Game</th>
+                      <th>Platforms</th>
+                      <th class="num">Downloads</th>
+                      <th class="num">Revenue</th>
+                      <th class="num">Ad Spend</th>
+                      <th class="num">ROAS</th>
+                      <th class="num">DAU</th>
+                      <th class="num">Rating</th>
+                    </tr>
+                  </thead>
+                  <tbody id="gamesTableBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
         </section>
       </section>
     </main>
