@@ -213,6 +213,14 @@
   gap: 22px;
 }
 
+.auth-screen {
+  min-height: calc(100vh - 132px);
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 18px;
+}
+
 .panel {
   border: 1px solid var(--admin-line);
   border-radius: 28px;
@@ -286,12 +294,6 @@
   display: none;
 }
 
-.admin-auth-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
-  gap: 22px;
-}
-
 .panel-head {
   display: flex;
   align-items: start;
@@ -311,6 +313,16 @@
 .form-panel,
 .chart-panel {
   padding: 24px;
+}
+
+.auth-panel-standalone {
+  width: min(100%, 520px);
+}
+
+.auth-note {
+  margin-top: 4px;
+  color: var(--admin-muted);
+  line-height: 1.7;
 }
 
 .stack-form {
@@ -589,7 +601,6 @@ code {
 }
 
 @media (max-width: 1180px) {
-  .admin-auth-grid,
   .admin-hero,
   .filter-grid,
   .admin-card-grid,
@@ -607,7 +618,6 @@ code {
     width: min(calc(100% - 28px), 1320px);
   }
 
-  .admin-auth-grid,
   .admin-hero,
   .filter-grid,
   .admin-card-grid,

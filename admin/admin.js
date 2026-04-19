@@ -42,6 +42,7 @@ const els = {
   authGate: document.querySelector("#authGate"),
   authGateTitle: document.querySelector("#authGateTitle"),
   authGateText: document.querySelector("#authGateText"),
+  authScreen: document.querySelector("#authScreen"),
   configBanner: document.querySelector("#configBanner"),
   sessionBadge: document.querySelector("#sessionBadge"),
   logoutButton: document.querySelector("#logoutButton"),
@@ -197,15 +198,17 @@ async function handleLogout() {
 }
 
 function renderSetupState() {
-  setAuthGate("setup");
   renderSignedOut();
+  els.authScreen.hidden = false;
   els.configBanner.hidden = false;
+  setAuthGate("setup");
   setBadge("Setup required");
   setAuthFeedback("Waiting for Firebase config.", "error");
 }
 
 function renderSignedOut() {
   setAuthGate("hidden");
+  els.authScreen.hidden = false;
   els.loginPanel.hidden = false;
   els.appPanel.hidden = true;
   els.logoutButton.hidden = true;
@@ -214,6 +217,7 @@ function renderSignedOut() {
 
 function renderSignedIn() {
   setAuthGate("signed_in");
+  els.authScreen.hidden = true;
   els.loginPanel.hidden = true;
   els.appPanel.hidden = false;
   els.logoutButton.hidden = false;

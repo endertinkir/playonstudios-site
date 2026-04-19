@@ -37,36 +37,12 @@
     </header>
 
     <main class="admin-main">
-      <section class="admin-hero panel">
-        <div class="admin-hero-copy">
-          <p class="eyebrow">Private Studio Dashboard</p>
-          <h1>One place for your iOS and Android game numbers.</h1>
-          <p class="admin-hero-lead">
-            Track store metrics, revenue, spend, DAU and release notes under <code>/admin</code>. This panel is wired for
-            Firebase Auth + Firestore so you can keep the site static and still have a secure private backend.
-          </p>
-        </div>
-
-        <div class="admin-hero-note">
-          <strong>Current model</strong>
-          <p>Manual entry from this dashboard into Firestore. If your games already write data into Firebase, send the exact path/schema and it can be mapped into this panel.</p>
-        </div>
-      </section>
-
-      <section class="panel admin-banner" id="configBanner">
-        <strong>Firebase setup is still using placeholders.</strong>
-        <p>
-          Open <code>/admin/firebase-config.js</code>, add your Firebase web config, and replace the admin email.
-          Firestore security rules are included in <code>/firebase/firestore.rules</code>.
-        </p>
-      </section>
-
-      <section class="admin-auth-grid">
-        <section class="panel auth-panel" id="loginPanel">
+      <section class="auth-screen" id="authScreen">
+        <section class="panel auth-panel auth-panel-standalone" id="loginPanel">
           <div class="panel-head">
             <div>
               <p class="section-kicker">Admin Login</p>
-              <h2>Only your account can get in.</h2>
+              <h2>Sign in to open the dashboard.</h2>
             </div>
           </div>
 
@@ -85,26 +61,15 @@
           </form>
 
           <p class="panel-feedback" id="authFeedback">Waiting for Firebase config.</p>
+          <p class="auth-note">Only the allowed admin account can read dashboard data.</p>
         </section>
 
-        <aside class="panel setup-panel">
-          <div class="panel-head">
-            <div>
-              <p class="section-kicker">Setup Checklist</p>
-              <h2>What this needs from you</h2>
-            </div>
-          </div>
-
-          <ol class="setup-list">
-            <li>Firebase web config values from your project settings.</li>
-            <li>The single admin email address you want to allow.</li>
-            <li>Firebase Auth enabled with the Email/Password provider.</li>
-            <li>Firestore database created and rules deployed from this repo.</li>
-            <li>Optional: the existing Firebase collection/path if game data already lives there.</li>
-          </ol>
-
-          <a class="text-link" href="/ADMIN_SETUP.md">Open setup guide</a>
-        </aside>
+        <section class="panel admin-banner" id="configBanner">
+          <strong>Firebase setup is still using placeholders.</strong>
+          <p>
+            Open <code>/admin/firebase-config.js</code>, add your Firebase web config, and replace the admin email.
+          </p>
+        </section>
       </section>
 
       <section id="appPanel" class="admin-app" hidden>
