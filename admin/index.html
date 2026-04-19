@@ -15,6 +15,14 @@
   <script type="module" src="/admin/admin.js"></script>
 </head>
 <body class="page-admin">
+  <div class="admin-gate" id="authGate" hidden>
+    <div class="admin-gate-card">
+      <p class="eyebrow">Protected Area</p>
+      <h1 id="authGateTitle">Checking access</h1>
+      <p id="authGateText">Verifying your admin session.</p>
+    </div>
+  </div>
+
   <div class="admin-shell">
     <header class="admin-topbar">
       <a class="brandmark" href="/index.html" aria-label="Play On Studios home">

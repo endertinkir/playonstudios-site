@@ -39,6 +39,9 @@ const state = {
 };
 
 const els = {
+  authGate: document.querySelector("#authGate"),
+  authGateTitle: document.querySelector("#authGateTitle"),
+  authGateText: document.querySelector("#authGateText"),
   configBanner: document.querySelector("#configBanner"),
   sessionBadge: document.querySelector("#sessionBadge"),
   logoutButton: document.querySelector("#logoutButton"),
@@ -97,6 +100,7 @@ const els = {
 
 wireEvents();
 initializeDefaults();
+setAuthGate("loading");
 
 if (hasPlaceholderConfig()) {
   renderSetupState();
@@ -193,6 +197,7 @@ async function handleLogout() {
 }
 
 function renderSetupState() {
+  setAuthGate("setup");
   renderSignedOut();
   els.configBanner.hidden = false;
   setBadge("Setup required");
@@ -200,6 +205,7 @@ function renderSetupState() {
 }
 
 function renderSignedOut() {
+  setAuthGate("hidden");
   els.loginPanel.hidden = false;
   els.appPanel.hidden = true;
   els.logoutButton.hidden = true;
@@ -207,6 +213,7 @@ function renderSignedOut() {
 }
 
 function renderSignedIn() {
+  setAuthGate("signed_in");
   els.loginPanel.hidden = true;
   els.appPanel.hidden = false;
   els.logoutButton.hidden = false;
@@ -896,6 +903,29 @@ function parseDate(value) {
 function setBadge(text, isLive = false) {
   els.sessionBadge.textContent = text;
   els.sessionBadge.classList.toggle("is-live", isLive);
+}
+
+function setAuthGate(stateName) {
+  const states = {
+    loading: {
+      title: "Checking access",
+      text: "Verifying your admin session."
+    },
+    setup: {
+      title: "Setup required",
+      text: "Firebase config is incomplete. Finish setup before this page can be used."
+    },
+  };
+
+  if (stateName === "signed_in" || stateName === "hidden") {
+    els.authGate.hidden = true;
+    return;
+  }
+
+  const stateCopy = states[stateName] || states.loading;
+  els.authGateTitle.textContent = stateCopy.title;
+  els.authGateText.textContent = stateCopy.text;
+  els.authGate.hidden = false;
 }
 
 function setAuthFeedback(message, tone) {
