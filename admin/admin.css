@@ -21,6 +21,10 @@
     linear-gradient(180deg, #07101a 0%, #08111c 46%, #101d2d 100%);
 }
 
+.page-admin [hidden] {
+  display: none !important;
+}
+
 .page-admin .site-shell {
   width: min(calc(100% - 40px), 1320px);
 }
