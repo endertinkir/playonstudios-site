@@ -10,6 +10,7 @@ export const PLAYON_ADMIN_CONFIG = {
     measurementId: "G-T98WFSQZ88"
   },
   collections: {
+    users: "users",
     games: "studioGames",
     dailyMetrics: "studioDailyMetrics"
   },

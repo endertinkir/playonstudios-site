@@ -8,33 +8,18 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   collection,
-  deleteDoc,
-  doc,
   getDocs,
-  getFirestore,
-  limit,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  where
+  getFirestore
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const config = PLAYON_ADMIN_CONFIG;
-const statusLabels = {
-  live: "Live",
-  soft_launch: "Soft launch",
-  in_development: "In development",
-  sunset: "Sunset"
-};
+const levelBuckets = ["0-4", "5-9", "10-19", "20-49", "50+"];
 
 const state = {
   auth: null,
   db: null,
   user: null,
-  games: [],
-  rangeMetrics: [],
-  recentMetrics: [],
+  users: [],
   charts: {}
 };
 
@@ -56,47 +41,16 @@ const els = {
   rangePreset: document.querySelector("#rangePreset"),
   rangeStart: document.querySelector("#rangeStart"),
   rangeEnd: document.querySelector("#rangeEnd"),
-  gameFilter: document.querySelector("#gameFilter"),
   platformFilter: document.querySelector("#platformFilter"),
   refreshButton: document.querySelector("#refreshButton"),
   dataFreshness: document.querySelector("#dataFreshness"),
-  kpiRevenue: document.querySelector("#kpiRevenue"),
-  kpiDownloads: document.querySelector("#kpiDownloads"),
-  kpiSpend: document.querySelector("#kpiSpend"),
-  kpiDau: document.querySelector("#kpiDau"),
-  kpiRoas: document.querySelector("#kpiRoas"),
+  kpiTotalProfiles: document.querySelector("#kpiTotalProfiles"),
+  kpiActiveProfiles: document.querySelector("#kpiActiveProfiles"),
+  kpiAvgLevel: document.querySelector("#kpiAvgLevel"),
+  kpiAvgPowerUses: document.querySelector("#kpiAvgPowerUses"),
+  kpiAvgToolsUnlocked: document.querySelector("#kpiAvgToolsUnlocked"),
   summaryTableBody: document.querySelector("#summaryTableBody"),
-  gamesTableBody: document.querySelector("#gamesTableBody"),
-  metricsTableBody: document.querySelector("#metricsTableBody"),
-  gameForm: document.querySelector("#gameForm"),
-  gameId: document.querySelector("#gameId"),
-  gameName: document.querySelector("#gameName"),
-  gameSlug: document.querySelector("#gameSlug"),
-  gameStatus: document.querySelector("#gameStatus"),
-  platformIos: document.querySelector("#platformIos"),
-  platformAndroid: document.querySelector("#platformAndroid"),
-  gameIosUrl: document.querySelector("#gameIosUrl"),
-  gameAndroidUrl: document.querySelector("#gameAndroidUrl"),
-  gameNotes: document.querySelector("#gameNotes"),
-  resetGameForm: document.querySelector("#resetGameForm"),
-  gameFeedback: document.querySelector("#gameFeedback"),
-  metricForm: document.querySelector("#metricForm"),
-  metricGame: document.querySelector("#metricGame"),
-  metricPlatform: document.querySelector("#metricPlatform"),
-  metricDate: document.querySelector("#metricDate"),
-  metricDownloads: document.querySelector("#metricDownloads"),
-  metricRevenue: document.querySelector("#metricRevenue"),
-  metricAdRevenue: document.querySelector("#metricAdRevenue"),
-  metricIapRevenue: document.querySelector("#metricIapRevenue"),
-  metricAdSpend: document.querySelector("#metricAdSpend"),
-  metricDau: document.querySelector("#metricDau"),
-  metricMau: document.querySelector("#metricMau"),
-  metricSessions: document.querySelector("#metricSessions"),
-  metricRating: document.querySelector("#metricRating"),
-  metricCrashFree: document.querySelector("#metricCrashFree"),
-  metricNotes: document.querySelector("#metricNotes"),
-  resetMetricForm: document.querySelector("#resetMetricForm"),
-  metricFeedback: document.querySelector("#metricFeedback")
+  recentUsersTableBody: document.querySelector("#recentUsersTableBody")
 };
 
 wireEvents();
@@ -113,23 +67,16 @@ function wireEvents() {
   els.loginForm.addEventListener("submit", handleLoginSubmit);
   els.logoutButton.addEventListener("click", handleLogout);
   els.rangePreset.addEventListener("change", handlePresetChange);
-  els.rangeStart.addEventListener("change", clearPresetSelection);
-  els.rangeEnd.addEventListener("change", clearPresetSelection);
-  els.gameFilter.addEventListener("change", handleSliceFilterChange);
-  els.platformFilter.addEventListener("change", handleSliceFilterChange);
-  els.refreshButton.addEventListener("click", refreshRangeAndRecentData);
-  els.gameForm.addEventListener("submit", handleGameSubmit);
-  els.resetGameForm.addEventListener("click", resetGameForm);
-  els.metricForm.addEventListener("submit", handleMetricSubmit);
-  els.resetMetricForm.addEventListener("click", resetMetricForm);
-  els.gameName.addEventListener("input", maybeMirrorSlug);
-  els.gamesTableBody.addEventListener("click", handleGameTableClick);
-  els.metricsTableBody.addEventListener("click", handleMetricsTableClick);
+  els.rangeStart.addEventListener("change", handleManualRangeChange);
+  els.rangeEnd.addEventListener("change", handleManualRangeChange);
+  els.platformFilter.addEventListener("change", renderDashboard);
+  els.refreshButton.addEventListener("click", () => {
+    refreshAll().catch(handleDashboardError);
+  });
 }
 
 function initializeDefaults() {
   setDateRangeFromPreset(Number(els.rangePreset.value));
-  els.metricDate.value = todayIso();
 }
 
 function initializeFirebase() {
@@ -159,7 +106,7 @@ function initializeFirebase() {
     try {
       await refreshAll();
     } catch (error) {
-      handleFirestoreError(error, els.authFeedback);
+      handleDashboardError(error);
     }
   });
 }
@@ -226,163 +173,184 @@ function renderSignedIn() {
 }
 
 async function refreshAll() {
-  await loadGames();
-  await refreshRangeAndRecentData();
-}
-
-async function refreshRangeAndRecentData() {
   if (!state.db) {
     return;
   }
 
-  await Promise.all([loadRangeMetrics(), loadRecentMetrics()]);
+  await loadUsers();
   renderDashboard();
-  renderRecentMetricsTable();
   els.dataFreshness.textContent = `Last synced ${formatDateTime(new Date())}`;
 }
 
-async function loadGames() {
-  const gamesQuery = query(
-    collection(state.db, config.collections.games),
-    orderBy("name", "asc")
-  );
-  const snapshot = await getDocs(gamesQuery);
+async function loadUsers() {
+  const usersCollection = config.collections.users || "users";
+  const snapshot = await getDocs(collection(state.db, usersCollection));
 
-  state.games = snapshot.docs.map((snapshotDoc) => normalizeGame(snapshotDoc.id, snapshotDoc.data()));
-  populateGameOptions();
-  renderGamesTable();
-}
-
-async function loadRangeMetrics() {
-  const start = els.rangeStart.value;
-  const end = els.rangeEnd.value;
-
-  if (!start || !end) {
-    return;
-  }
-
-  const metricsQuery = query(
-    collection(state.db, config.collections.dailyMetrics),
-    where("date", ">=", start),
-    where("date", "<=", end),
-    orderBy("date", "asc")
-  );
-
-  const snapshot = await getDocs(metricsQuery);
-  state.rangeMetrics = snapshot.docs.map((snapshotDoc) => normalizeMetric(snapshotDoc.id, snapshotDoc.data()));
-}
-
-async function loadRecentMetrics() {
-  const metricsQuery = query(
-    collection(state.db, config.collections.dailyMetrics),
-    orderBy("date", "desc"),
-    limit(25)
-  );
-
-  const snapshot = await getDocs(metricsQuery);
-  state.recentMetrics = snapshot.docs.map((snapshotDoc) => normalizeMetric(snapshotDoc.id, snapshotDoc.data()));
-}
-
-function populateGameOptions() {
-  const options = ['<option value="all">All games</option>']
-    .concat(state.games.map((game) => `<option value="${escapeHtml(game.id)}">${escapeHtml(game.name)}</option>`))
-    .join("");
-
-  els.gameFilter.innerHTML = options;
-
-  const metricOptions = ['<option value="">Select a game</option>']
-    .concat(state.games.map((game) => `<option value="${escapeHtml(game.id)}">${escapeHtml(game.name)}</option>`))
-    .join("");
-
-  els.metricGame.innerHTML = metricOptions;
+  state.users = snapshot.docs
+    .map((snapshotDoc) => normalizeUser(snapshotDoc.id, snapshotDoc.data()))
+    .sort((left, right) => compareDates(right.updatedAt, left.updatedAt));
 }
 
 function renderDashboard() {
-  const metrics = getFilteredRangeMetrics();
-  const summary = buildSummary(metrics);
+  const summary = buildUserSummary();
 
-  els.kpiRevenue.textContent = formatCurrency(summary.totalRevenue);
-  els.kpiDownloads.textContent = formatNumber(summary.totalDownloads);
-  els.kpiSpend.textContent = formatCurrency(summary.totalSpend);
-  els.kpiDau.textContent = formatNumber(summary.averageDau);
-  els.kpiRoas.textContent = formatPercent(summary.roas);
+  els.kpiTotalProfiles.textContent = formatNumber(summary.totalProfiles);
+  els.kpiActiveProfiles.textContent = formatNumber(summary.activeProfiles);
+  els.kpiAvgLevel.textContent = formatDecimal(summary.avgLevel);
+  els.kpiAvgPowerUses.textContent = formatDecimal(summary.avgPowerUses);
+  els.kpiAvgToolsUnlocked.textContent = formatDecimal(summary.avgToolsUnlocked);
 
-  renderSummaryTable(summary.gameRows);
+  renderPlatformSummaryTable(summary.platformRows);
+  renderRecentUsersTable(summary.recentUsers);
   renderTrendChart(summary.dailyRows);
-  renderDownloadsChart(summary.dailyRows);
   renderPlatformChart(summary.platformRows);
+  renderLevelChart(summary.levelRows);
 }
 
-function renderSummaryTable(rows) {
+function buildUserSummary() {
+  const usersForPlatform = getUsersForPlatform();
+  const activeUsers = usersForPlatform.filter(isUserInRange);
+  const powerUses = activeUsers.map((user) => user.powerUses);
+  const toolsUnlocked = activeUsers.map((user) => user.toolsUnlockedCount);
+  const levels = activeUsers.map((user) => user.level);
+
+  return {
+    totalProfiles: usersForPlatform.length,
+    activeProfiles: activeUsers.length,
+    avgLevel: average(levels),
+    avgPowerUses: average(powerUses),
+    avgToolsUnlocked: average(toolsUnlocked),
+    dailyRows: buildDailyRows(activeUsers),
+    platformRows: buildPlatformRows(activeUsers),
+    levelRows: buildLevelRows(activeUsers),
+    recentUsers: buildRecentUsers(activeUsers, usersForPlatform)
+  };
+}
+
+function getUsersForPlatform() {
+  const platformFilter = els.platformFilter.value;
+
+  if (platformFilter === "all") {
+    return state.users;
+  }
+
+  return state.users.filter((user) => user.lastSeenPlatform === platformFilter);
+}
+
+function isUserInRange(user) {
+  if (!user.updatedAt || Number.isNaN(user.updatedAt.getTime())) {
+    return false;
+  }
+
+  const { start, end } = getRangeBounds();
+  return user.updatedAt >= start && user.updatedAt <= end;
+}
+
+function buildDailyRows(users) {
+  const { start, end } = getRangeBounds();
+  const dayMap = new Map();
+
+  for (const date of iterateDays(start, end)) {
+    dayMap.set(toIsoDate(date), 0);
+  }
+
+  users.forEach((user) => {
+    const key = toIsoDate(user.updatedAt);
+    dayMap.set(key, (dayMap.get(key) || 0) + 1);
+  });
+
+  return Array.from(dayMap.entries()).map(([date, count]) => ({ date, count }));
+}
+
+function buildPlatformRows(users) {
+  const platformMap = new Map();
+
+  users.forEach((user) => {
+    const key = user.lastSeenPlatform || "unknown";
+    const entry = platformMap.get(key) || {
+      platform: key,
+      profiles: 0,
+      levelSum: 0,
+      powerUsesSum: 0,
+      toolsUnlockedSum: 0
+    };
+
+    entry.profiles += 1;
+    entry.levelSum += user.level;
+    entry.powerUsesSum += user.powerUses;
+    entry.toolsUnlockedSum += user.toolsUnlockedCount;
+    platformMap.set(key, entry);
+  });
+
+  return Array.from(platformMap.values())
+    .map((entry) => ({
+      platform: entry.platform,
+      profiles: entry.profiles,
+      avgLevel: entry.profiles ? entry.levelSum / entry.profiles : 0,
+      avgPowerUses: entry.profiles ? entry.powerUsesSum / entry.profiles : 0,
+      avgToolsUnlocked: entry.profiles ? entry.toolsUnlockedSum / entry.profiles : 0
+    }))
+    .sort((left, right) => right.profiles - left.profiles);
+}
+
+function buildLevelRows(users) {
+  const bucketMap = new Map(levelBuckets.map((bucket) => [bucket, 0]));
+
+  users.forEach((user) => {
+    const bucket = bucketLevel(user.level);
+    bucketMap.set(bucket, (bucketMap.get(bucket) || 0) + 1);
+  });
+
+  return levelBuckets.map((bucket) => ({
+    label: bucket,
+    count: bucketMap.get(bucket) || 0
+  }));
+}
+
+function buildRecentUsers(activeUsers, allPlatformUsers) {
+  const source = activeUsers.length ? activeUsers : allPlatformUsers;
+
+  return [...source]
+    .sort((left, right) => compareDates(right.updatedAt, left.updatedAt))
+    .slice(0, 25);
+}
+
+function renderPlatformSummaryTable(rows) {
   if (!rows.length) {
-    els.summaryTableBody.innerHTML = `<tr><td colspan="5" class="table-empty">No metrics in this range yet.</td></tr>`;
+    els.summaryTableBody.innerHTML = `<tr><td colspan="5" class="table-empty">No active profiles in this range yet.</td></tr>`;
     return;
   }
 
   els.summaryTableBody.innerHTML = rows
     .map((row) => `
       <tr>
-        <td>${escapeHtml(row.gameName)}</td>
-        <td>${formatCurrency(row.revenue)}</td>
-        <td>${formatNumber(row.downloads)}</td>
-        <td>${formatCurrency(row.spend)}</td>
-        <td>${formatPercent(row.roas)}</td>
+        <td>${escapeHtml(platformLabel(row.platform))}</td>
+        <td>${formatNumber(row.profiles)}</td>
+        <td>${formatDecimal(row.avgLevel)}</td>
+        <td>${formatDecimal(row.avgPowerUses)}</td>
+        <td>${formatDecimal(row.avgToolsUnlocked)}</td>
       </tr>
     `)
     .join("");
 }
 
-function renderGamesTable() {
-  if (!state.games.length) {
-    els.gamesTableBody.innerHTML = `<tr><td colspan="5" class="table-empty">No games created yet.</td></tr>`;
+function renderRecentUsersTable(users) {
+  if (!users.length) {
+    els.recentUsersTableBody.innerHTML = `<tr><td colspan="8" class="table-empty">No recent profiles found for this filter.</td></tr>`;
     return;
   }
 
-  els.gamesTableBody.innerHTML = state.games
-    .map((game) => `
+  els.recentUsersTableBody.innerHTML = users
+    .map((user) => `
       <tr>
-        <td>
-          <strong>${escapeHtml(game.name)}</strong>
-          ${renderStoreLinks(game)}
-        </td>
-        <td><span class="status-pill" data-status="${escapeHtml(game.status)}">${escapeHtml(statusLabels[game.status] || game.status)}</span></td>
-        <td>
-          <div class="pill-list">
-            ${game.platforms.map((platform) => `<span class="platform-pill">${escapeHtml(platformLabel(platform))}</span>`).join("")}
-          </div>
-        </td>
-        <td>${formatDateTime(game.updatedAt)}</td>
-        <td>
-          <button class="row-action" type="button" data-game-edit="${escapeHtml(game.id)}">Edit</button>
-        </td>
-      </tr>
-    `)
-    .join("");
-}
-
-function renderRecentMetricsTable() {
-  const metrics = state.recentMetrics.filter(matchesFilters);
-
-  if (!metrics.length) {
-    els.metricsTableBody.innerHTML = `<tr><td colspan="7" class="table-empty">No recent daily metrics found.</td></tr>`;
-    return;
-  }
-
-  els.metricsTableBody.innerHTML = metrics
-    .map((metric) => `
-      <tr>
-        <td>${escapeHtml(metric.date)}</td>
-        <td>${escapeHtml(metric.gameName)}</td>
-        <td>${escapeHtml(platformLabel(metric.platform))}</td>
-        <td>${formatCurrency(metric.revenue)}</td>
-        <td>${formatNumber(metric.downloads)}</td>
-        <td>${formatCurrency(metric.adSpend)}</td>
-        <td>
-          <div class="row-actions">
-            <button class="row-action" type="button" data-metric-edit="${escapeHtml(metric.id)}">Edit</button>
-            <button class="row-action is-danger" type="button" data-metric-delete="${escapeHtml(metric.id)}">Delete</button>
-          </div>
-        </td>
+        <td><code>${escapeHtml(truncateId(user.id))}</code></td>
+        <td>${escapeHtml(platformLabel(user.lastSeenPlatform))}</td>
+        <td>${formatNumber(user.level)}</td>
+        <td>${formatNumber(user.hintCount)}</td>
+        <td>${formatNumber(user.shuffleCount)}</td>
+        <td>${formatNumber(user.undoCount)}</td>
+        <td>${formatNumber(user.toolsUnlockedCount)}</td>
+        <td>${formatDateTime(user.updatedAt)}</td>
       </tr>
     `)
     .join("");
@@ -393,55 +361,19 @@ function renderTrendChart(rows) {
     return;
   }
 
-  const labels = rows.map((row) => row.date);
-  const revenue = rows.map((row) => row.revenue);
-  const spend = rows.map((row) => row.spend);
-
   upsertChart("trendChart", {
     type: "line",
     data: {
-      labels,
+      labels: rows.map((row) => row.date),
       datasets: [
         {
-          label: "Revenue",
-          data: revenue,
+          label: "Updated profiles",
+          data: rows.map((row) => row.count),
           borderColor: "#dfc38f",
           backgroundColor: "rgba(223, 195, 143, 0.18)",
           borderWidth: 3,
           fill: true,
           tension: 0.34
-        },
-        {
-          label: "Ad Spend",
-          data: spend,
-          borderColor: "#8db7e3",
-          backgroundColor: "rgba(141, 183, 227, 0.12)",
-          borderWidth: 2,
-          fill: false,
-          tension: 0.32
-        }
-      ]
-    },
-    options: baseChartOptions()
-  });
-}
-
-function renderDownloadsChart(rows) {
-  if (!window.Chart) {
-    return;
-  }
-
-  upsertChart("downloadsChart", {
-    type: "bar",
-    data: {
-      labels: rows.map((row) => row.date),
-      datasets: [
-        {
-          label: "Downloads",
-          data: rows.map((row) => row.downloads),
-          backgroundColor: "rgba(145, 214, 177, 0.74)",
-          borderRadius: 8,
-          maxBarThickness: 20
         }
       ]
     },
@@ -460,8 +392,8 @@ function renderPlatformChart(rows) {
       labels: rows.map((row) => platformLabel(row.platform)),
       datasets: [
         {
-          data: rows.map((row) => row.revenue),
-          backgroundColor: ["#dfc38f", "#8db7e3", "#91d6b1"],
+          data: rows.map((row) => row.profiles),
+          backgroundColor: ["#dfc38f", "#8db7e3", "#91d6b1", "#f1a598"],
           borderWidth: 0
         }
       ]
@@ -470,6 +402,29 @@ function renderPlatformChart(rows) {
       ...baseChartOptions(),
       cutout: "68%"
     }
+  });
+}
+
+function renderLevelChart(rows) {
+  if (!window.Chart) {
+    return;
+  }
+
+  upsertChart("levelChart", {
+    type: "bar",
+    data: {
+      labels: rows.map((row) => row.label),
+      datasets: [
+        {
+          label: "Profiles",
+          data: rows.map((row) => row.count),
+          backgroundColor: "rgba(141, 183, 227, 0.74)",
+          borderRadius: 8,
+          maxBarThickness: 40
+        }
+      ]
+    },
+    options: baseChartOptions()
   });
 }
 
@@ -515,206 +470,14 @@ function baseChartOptions() {
   };
 }
 
-async function handleGameSubmit(event) {
-  event.preventDefault();
-
-  if (!state.db || !state.user) {
-    return;
-  }
-
-  const platforms = getSelectedPlatforms();
-  if (!platforms.length) {
-    setFeedback(els.gameFeedback, "Pick at least one platform.", "error");
-    return;
-  }
-
-  const id = els.gameId.value || crypto.randomUUID();
-  const payload = {
-    name: els.gameName.value.trim(),
-    slug: slugify(els.gameSlug.value.trim() || els.gameName.value),
-    status: els.gameStatus.value,
-    platforms,
-    iosUrl: els.gameIosUrl.value.trim(),
-    androidUrl: els.gameAndroidUrl.value.trim(),
-    notes: els.gameNotes.value.trim(),
-    updatedAt: serverTimestamp(),
-    updatedBy: state.user.email
-  };
-
-  if (!payload.name || !payload.slug) {
-    setFeedback(els.gameFeedback, "Game name and slug are required.", "error");
-    return;
-  }
-
-  if (!els.gameId.value) {
-    payload.createdAt = serverTimestamp();
-    payload.createdBy = state.user.email;
-  }
-
-  try {
-    await setDoc(doc(state.db, config.collections.games, id), payload, { merge: true });
-    setFeedback(els.gameFeedback, "Game saved.", "success");
-    resetGameForm();
-    await loadGames();
-  } catch (error) {
-    handleFirestoreError(error, els.gameFeedback);
-  }
-}
-
-async function handleMetricSubmit(event) {
-  event.preventDefault();
-
-  if (!state.db || !state.user) {
-    return;
-  }
-
-  const gameId = els.metricGame.value;
-  const game = state.games.find((entry) => entry.id === gameId);
-  const platform = els.metricPlatform.value;
-  const date = els.metricDate.value;
-
-  if (!game || !platform || !date) {
-    setFeedback(els.metricFeedback, "Game, platform and date are required.", "error");
-    return;
-  }
-
-  const adRevenue = readNumber(els.metricAdRevenue.value);
-  const iapRevenue = readNumber(els.metricIapRevenue.value);
-  const explicitRevenue = readNumber(els.metricRevenue.value);
-  const computedRevenue = explicitRevenue > 0 ? explicitRevenue : adRevenue + iapRevenue;
-  const documentId = buildMetricId(gameId, platform, date);
-
-  const payload = {
-    gameId,
-    gameName: game.name,
-    gameSlug: game.slug,
-    platform,
-    date,
-    downloads: readNumber(els.metricDownloads.value),
-    revenue: computedRevenue,
-    adRevenue,
-    iapRevenue,
-    adSpend: readNumber(els.metricAdSpend.value),
-    dau: readNumber(els.metricDau.value),
-    mau: readNumber(els.metricMau.value),
-    sessions: readNumber(els.metricSessions.value),
-    rating: readNumber(els.metricRating.value),
-    crashFreeUsers: readNumber(els.metricCrashFree.value),
-    notes: els.metricNotes.value.trim(),
-    updatedAt: serverTimestamp(),
-    updatedBy: state.user.email
-  };
-
-  try {
-    const metricRef = doc(state.db, config.collections.dailyMetrics, documentId);
-    await setDoc(metricRef, payload, { merge: true });
-    setFeedback(els.metricFeedback, "Daily metric saved.", "success");
-    resetMetricForm();
-    await refreshRangeAndRecentData();
-  } catch (error) {
-    handleFirestoreError(error, els.metricFeedback);
-  }
-}
-
-function handleGameTableClick(event) {
-  const gameId = event.target.dataset.gameEdit;
-  if (!gameId) {
-    return;
-  }
-
-  const game = state.games.find((entry) => entry.id === gameId);
-  if (!game) {
-    return;
-  }
-
-  els.gameId.value = game.id;
-  els.gameName.value = game.name;
-  els.gameSlug.value = game.slug;
-  els.gameStatus.value = game.status;
-  els.platformIos.checked = game.platforms.includes("ios");
-  els.platformAndroid.checked = game.platforms.includes("android");
-  els.gameIosUrl.value = game.iosUrl || "";
-  els.gameAndroidUrl.value = game.androidUrl || "";
-  els.gameNotes.value = game.notes || "";
-  setFeedback(els.gameFeedback, `Editing ${game.name}.`, "success");
-  els.gameName.focus();
-}
-
-async function handleMetricsTableClick(event) {
-  const editId = event.target.dataset.metricEdit;
-  const deleteId = event.target.dataset.metricDelete;
-
-  if (editId) {
-    const metric = state.recentMetrics.find((entry) => entry.id === editId);
-    if (!metric) {
-      return;
-    }
-
-    els.metricGame.value = metric.gameId;
-    els.metricPlatform.value = metric.platform;
-    els.metricDate.value = metric.date;
-    els.metricDownloads.value = metric.downloads || "";
-    els.metricRevenue.value = metric.revenue || "";
-    els.metricAdRevenue.value = metric.adRevenue || "";
-    els.metricIapRevenue.value = metric.iapRevenue || "";
-    els.metricAdSpend.value = metric.adSpend || "";
-    els.metricDau.value = metric.dau || "";
-    els.metricMau.value = metric.mau || "";
-    els.metricSessions.value = metric.sessions || "";
-    els.metricRating.value = metric.rating || "";
-    els.metricCrashFree.value = metric.crashFreeUsers || "";
-    els.metricNotes.value = metric.notes || "";
-    setFeedback(els.metricFeedback, `Editing ${metric.gameName} on ${metric.date}.`, "success");
-    els.metricGame.focus();
-    return;
-  }
-
-  if (!deleteId || !state.db || !state.user) {
-    return;
-  }
-
-  const metric = state.recentMetrics.find((entry) => entry.id === deleteId);
-  const label = metric ? `${metric.gameName} ${metric.date} ${platformLabel(metric.platform)}` : "this entry";
-  if (!window.confirm(`Delete ${label}?`)) {
-    return;
-  }
-
-  try {
-    await deleteDoc(doc(state.db, config.collections.dailyMetrics, deleteId));
-    setFeedback(els.metricFeedback, "Daily metric deleted.", "success");
-    await refreshRangeAndRecentData();
-  } catch (error) {
-    handleFirestoreError(error, els.metricFeedback);
-  }
-}
-
-function resetGameForm() {
-  els.gameForm.reset();
-  els.gameId.value = "";
-  els.platformIos.checked = true;
-  els.platformAndroid.checked = true;
-  els.gameStatus.value = "live";
-  clearFeedback(els.gameFeedback);
-}
-
-function resetMetricForm() {
-  els.metricForm.reset();
-  els.metricDate.value = todayIso();
-  clearFeedback(els.metricFeedback);
-}
-
 function handlePresetChange() {
   setDateRangeFromPreset(Number(els.rangePreset.value));
-  refreshRangeAndRecentData().catch((error) => handleFirestoreError(error, els.metricFeedback));
-}
-
-function handleSliceFilterChange() {
   renderDashboard();
-  renderRecentMetricsTable();
 }
 
-function clearPresetSelection() {
+function handleManualRangeChange() {
   els.rangePreset.value = "";
+  renderDashboard();
 }
 
 function setDateRangeFromPreset(days) {
@@ -725,125 +488,82 @@ function setDateRangeFromPreset(days) {
   els.rangeEnd.value = toIsoDate(end);
 }
 
-function maybeMirrorSlug() {
-  if (els.gameId.value) {
-    return;
+function normalizeUser(id, payload) {
+  return {
+    id,
+    level: readNumber(payload.level),
+    hintCount: readNumber(payload.hintCount),
+    shuffleCount: readNumber(payload.shuffleCount),
+    undoCount: readNumber(payload.undoCount),
+    toolsUnlockedCount: readNumber(payload.toolsUnlockedCount),
+    schemaVersion: readNumber(payload.schemaVersion),
+    lastSeenPlatform: normalizePlatform(payload.lastSeenPlatform),
+    updatedAt: parseDate(payload.updatedAt),
+    powerUses: readNumber(payload.hintCount) + readNumber(payload.shuffleCount) + readNumber(payload.undoCount)
+  };
+}
+
+function normalizePlatform(value) {
+  if (!value) {
+    return "unknown";
   }
 
-  els.gameSlug.value = slugify(els.gameName.value);
+  const normalized = String(value).toLowerCase();
+  if (normalized.includes("android")) {
+    return "android";
+  }
+  if (normalized.includes("ios") || normalized.includes("iphone") || normalized.includes("ipad")) {
+    return "ios";
+  }
+  return normalized;
 }
 
-function getFilteredRangeMetrics() {
-  return state.rangeMetrics.filter(matchesFilters);
+function getRangeBounds() {
+  const start = new Date(`${els.rangeStart.value}T00:00:00`);
+  const end = new Date(`${els.rangeEnd.value}T23:59:59.999`);
+  return { start, end };
 }
 
-function matchesFilters(metric) {
-  const gameFilter = els.gameFilter.value;
-  const platformFilter = els.platformFilter.value;
+function iterateDays(start, end) {
+  const days = [];
+  const cursor = new Date(start);
 
-  const matchesGame = gameFilter === "all" || metric.gameId === gameFilter;
-  const matchesPlatform = platformFilter === "all" || metric.platform === platformFilter;
-  return matchesGame && matchesPlatform;
+  while (cursor <= end) {
+    days.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return days;
 }
 
-function buildSummary(metrics) {
-  const dailyMap = new Map();
-  const gameMap = new Map();
-  const platformMap = new Map();
+function average(values) {
+  if (!values.length) {
+    return 0;
+  }
 
-  let totalRevenue = 0;
-  let totalDownloads = 0;
-  let totalSpend = 0;
-  let dauSum = 0;
-
-  metrics.forEach((metric) => {
-    totalRevenue += metric.revenue;
-    totalDownloads += metric.downloads;
-    totalSpend += metric.adSpend;
-    dauSum += metric.dau;
-
-    const dailyEntry = dailyMap.get(metric.date) || { date: metric.date, revenue: 0, spend: 0, downloads: 0 };
-    dailyEntry.revenue += metric.revenue;
-    dailyEntry.spend += metric.adSpend;
-    dailyEntry.downloads += metric.downloads;
-    dailyMap.set(metric.date, dailyEntry);
-
-    const gameEntry = gameMap.get(metric.gameId) || {
-      gameName: metric.gameName,
-      revenue: 0,
-      downloads: 0,
-      spend: 0
-    };
-    gameEntry.revenue += metric.revenue;
-    gameEntry.downloads += metric.downloads;
-    gameEntry.spend += metric.adSpend;
-    gameMap.set(metric.gameId, gameEntry);
-
-    const platformEntry = platformMap.get(metric.platform) || {
-      platform: metric.platform,
-      revenue: 0
-    };
-    platformEntry.revenue += metric.revenue;
-    platformMap.set(metric.platform, platformEntry);
-  });
-
-  const dailyRows = Array.from(dailyMap.values()).sort((left, right) => left.date.localeCompare(right.date));
-  const gameRows = Array.from(gameMap.values())
-    .map((entry) => ({
-      ...entry,
-      roas: entry.spend > 0 ? entry.revenue / entry.spend : 0
-    }))
-    .sort((left, right) => right.revenue - left.revenue);
-  const platformRows = Array.from(platformMap.values()).sort((left, right) => right.revenue - left.revenue);
-
-  return {
-    totalRevenue,
-    totalDownloads,
-    totalSpend,
-    averageDau: metrics.length ? Math.round(dauSum / metrics.length) : 0,
-    roas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
-    dailyRows,
-    gameRows,
-    platformRows
-  };
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function normalizeGame(id, payload) {
-  return {
-    id,
-    name: payload.name || "Untitled",
-    slug: payload.slug || id,
-    status: payload.status || "live",
-    platforms: Array.isArray(payload.platforms) ? payload.platforms : [],
-    iosUrl: payload.iosUrl || "",
-    androidUrl: payload.androidUrl || "",
-    notes: payload.notes || "",
-    updatedAt: parseDate(payload.updatedAt),
-    createdAt: parseDate(payload.createdAt)
-  };
+function bucketLevel(level) {
+  if (level <= 4) {
+    return "0-4";
+  }
+  if (level <= 9) {
+    return "5-9";
+  }
+  if (level <= 19) {
+    return "10-19";
+  }
+  if (level <= 49) {
+    return "20-49";
+  }
+  return "50+";
 }
 
-function normalizeMetric(id, payload) {
-  return {
-    id,
-    gameId: payload.gameId || "",
-    gameName: payload.gameName || "Unknown game",
-    gameSlug: payload.gameSlug || "",
-    platform: payload.platform || "ios",
-    date: payload.date || "",
-    downloads: readNumber(payload.downloads),
-    revenue: readNumber(payload.revenue),
-    adRevenue: readNumber(payload.adRevenue),
-    iapRevenue: readNumber(payload.iapRevenue),
-    adSpend: readNumber(payload.adSpend),
-    dau: readNumber(payload.dau),
-    mau: readNumber(payload.mau),
-    sessions: readNumber(payload.sessions),
-    rating: readNumber(payload.rating),
-    crashFreeUsers: readNumber(payload.crashFreeUsers),
-    notes: payload.notes || "",
-    updatedAt: parseDate(payload.updatedAt)
-  };
+function compareDates(left, right) {
+  const leftTime = left instanceof Date && !Number.isNaN(left.getTime()) ? left.getTime() : 0;
+  const rightTime = right instanceof Date && !Number.isNaN(right.getTime()) ? right.getTime() : 0;
+  return leftTime - rightTime;
 }
 
 function isAllowedUser(email) {
@@ -862,48 +582,6 @@ function hasPlaceholderConfig() {
   );
 }
 
-function getSelectedPlatforms() {
-  return ["ios", "android"].filter((platform) => {
-    if (platform === "ios") {
-      return els.platformIos.checked;
-    }
-
-    return els.platformAndroid.checked;
-  });
-}
-
-function renderStoreLinks(game) {
-  const links = [];
-  if (game.iosUrl) {
-    links.push(`<a class="text-link" href="${escapeAttribute(game.iosUrl)}" target="_blank" rel="noreferrer">App Store</a>`);
-  }
-  if (game.androidUrl) {
-    links.push(`<a class="text-link" href="${escapeAttribute(game.androidUrl)}" target="_blank" rel="noreferrer">Google Play</a>`);
-  }
-  if (!links.length) {
-    return "";
-  }
-
-  return `<div class="link-cell">${links.join("<span>•</span>")}</div>`;
-}
-
-function buildMetricId(gameId, platform, date) {
-  return [gameId, platform, date].join("__");
-}
-
-function parseDate(value) {
-  if (!value) {
-    return null;
-  }
-  if (typeof value.toDate === "function") {
-    return value.toDate();
-  }
-  if (value instanceof Date) {
-    return value;
-  }
-  return new Date(value);
-}
-
 function setBadge(text, isLive = false) {
   els.sessionBadge.textContent = text;
   els.sessionBadge.classList.toggle("is-live", isLive);
@@ -918,7 +596,7 @@ function setAuthGate(stateName) {
     setup: {
       title: "Setup required",
       text: "Firebase config is incomplete. Finish setup before this page can be used."
-    },
+    }
   };
 
   if (stateName === "signed_in" || stateName === "hidden") {
@@ -949,25 +627,25 @@ function setFeedback(element, message, tone) {
   }
 }
 
-function clearFeedback(element) {
-  element.textContent = "";
-  element.classList.remove("is-error", "is-success");
-}
+function handleDashboardError(error) {
+  const message =
+    error.code === "permission-denied"
+      ? "Firestore denied access to the users collection. Update Firestore rules to allow the admin account to read users."
+      : error.message || "Unexpected Firebase error.";
 
-function formatCurrency(value) {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: config.dashboard.currency || "USD",
-    maximumFractionDigits: 0
-  }).format(value || 0);
+  els.dataFreshness.textContent = message;
+  setAuthFeedback(message, "error");
 }
 
 function formatNumber(value) {
   return new Intl.NumberFormat().format(Math.round(value || 0));
 }
 
-function formatPercent(value) {
-  return `${Math.round((value || 0) * 100)}%`;
+function formatDecimal(value) {
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1
+  }).format(value || 0);
 }
 
 function formatDateTime(date) {
@@ -989,6 +667,9 @@ function platformLabel(value) {
   if (value === "android") {
     return "Android";
   }
+  if (value === "unknown") {
+    return "Unknown";
+  }
   return value;
 }
 
@@ -1003,28 +684,30 @@ function normalizeAuthError(error) {
   return errorMessages[error.code] || error.message || "Login failed.";
 }
 
-function handleFirestoreError(error, feedbackElement) {
-  const message =
-    error.code === "permission-denied"
-      ? "Firestore denied access. Check the rules and confirm the admin email matches."
-      : error.code === "failed-precondition"
-        ? "Firestore needs an index or database setup change. Review ADMIN_SETUP.md."
-        : error.message || "Unexpected Firebase error.";
+function truncateId(value) {
+  if (!value || value.length <= 12) {
+    return value;
+  }
 
-  setFeedback(feedbackElement, message, "error");
-}
-
-function slugify(value) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
 }
 
 function readNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
+}
+
+function parseDate(value) {
+  if (!value) {
+    return null;
+  }
+  if (typeof value.toDate === "function") {
+    return value.toDate();
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  return new Date(value);
 }
 
 function toIsoDate(date) {
@@ -1034,10 +717,6 @@ function toIsoDate(date) {
   return `${year}-${month}-${day}`;
 }
 
-function todayIso() {
-  return toIsoDate(new Date());
-}
-
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -1045,8 +724,4 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-}
-
-function escapeAttribute(value) {
-  return escapeHtml(value);
 }

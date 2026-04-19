@@ -77,7 +77,7 @@
           <div class="panel-head">
             <div>
               <p class="section-kicker">Dashboard Filters</p>
-              <h2>Control the date range and slice.</h2>
+              <h2>Track player activity from Firestore.</h2>
             </div>
             <div class="panel-meta" id="dataFreshness">Not synced yet</div>
           </div>
@@ -104,13 +104,6 @@
             </label>
 
             <label class="field">
-              <span>Game</span>
-              <select id="gameFilter">
-                <option value="all">All games</option>
-              </select>
-            </label>
-
-            <label class="field">
               <span>Platform</span>
               <select id="platformFilter">
                 <option value="all">All platforms</option>
@@ -121,37 +114,39 @@
 
             <button class="button button-secondary filter-action" id="refreshButton" type="button">Refresh</button>
           </div>
+
+          <p class="panel-feedback">Source: <code>users</code> collection. Metrics are derived from <code>updatedAt</code>, <code>lastSeenPlatform</code>, <code>level</code>, <code>hintCount</code>, <code>shuffleCount</code>, <code>undoCount</code>, and <code>toolsUnlockedCount</code>.</p>
         </section>
 
         <section class="admin-card-grid">
           <article class="panel metric-card">
-            <span class="metric-label">Total Revenue</span>
-            <strong class="metric-value" id="kpiRevenue">$0</strong>
-            <span class="metric-caption">IAP + ad revenue in selected range</span>
+            <span class="metric-label">Total Profiles</span>
+            <strong class="metric-value" id="kpiTotalProfiles">0</strong>
+            <span class="metric-caption">All player documents matching the selected platform filter</span>
           </article>
 
           <article class="panel metric-card">
-            <span class="metric-label">Total Downloads</span>
-            <strong class="metric-value" id="kpiDownloads">0</strong>
-            <span class="metric-caption">Store installs entered into Firestore</span>
+            <span class="metric-label">Active In Range</span>
+            <strong class="metric-value" id="kpiActiveProfiles">0</strong>
+            <span class="metric-caption">Profiles updated during the selected date range</span>
           </article>
 
           <article class="panel metric-card">
-            <span class="metric-label">Ad Spend</span>
-            <strong class="metric-value" id="kpiSpend">$0</strong>
-            <span class="metric-caption">UA spend in selected range</span>
+            <span class="metric-label">Average Level</span>
+            <strong class="metric-value" id="kpiAvgLevel">0</strong>
+            <span class="metric-caption">Average player level among active profiles</span>
           </article>
 
           <article class="panel metric-card">
-            <span class="metric-label">Average DAU</span>
-            <strong class="metric-value" id="kpiDau">0</strong>
-            <span class="metric-caption">Average daily active users</span>
+            <span class="metric-label">Avg Power Uses</span>
+            <strong class="metric-value" id="kpiAvgPowerUses">0</strong>
+            <span class="metric-caption">Average total hints, shuffles and undos per active profile</span>
           </article>
 
           <article class="panel metric-card">
-            <span class="metric-label">ROAS</span>
-            <strong class="metric-value" id="kpiRoas">0%</strong>
-            <span class="metric-caption">Revenue / ad spend</span>
+            <span class="metric-label">Avg Tools Unlocked</span>
+            <strong class="metric-value" id="kpiAvgToolsUnlocked">0</strong>
+            <span class="metric-caption">Average unlocked tools among active profiles</span>
           </article>
         </section>
 
@@ -159,38 +154,38 @@
           <article class="panel chart-panel chart-span-2">
             <div class="panel-head">
               <div>
-                <p class="section-kicker">Daily Trend</p>
-                <h2>Revenue vs spend</h2>
+                <p class="section-kicker">Activity Trend</p>
+                <h2>Profiles updated per day</h2>
               </div>
             </div>
-            <canvas id="trendChart" aria-label="Revenue and spend trend"></canvas>
+            <canvas id="trendChart" aria-label="Daily active profile trend"></canvas>
           </article>
 
           <article class="panel chart-panel">
             <div class="panel-head">
               <div>
-                <p class="section-kicker">Acquisition</p>
-                <h2>Downloads per day</h2>
-              </div>
-            </div>
-            <canvas id="downloadsChart" aria-label="Downloads trend"></canvas>
-          </article>
-
-          <article class="panel chart-panel">
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">Split</p>
-                <h2>Revenue by platform</h2>
+                <p class="section-kicker">Platform Split</p>
+                <h2>Active profiles by platform</h2>
               </div>
             </div>
             <canvas id="platformChart" aria-label="Platform split"></canvas>
           </article>
 
+          <article class="panel chart-panel">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">Progression</p>
+                <h2>Level distribution</h2>
+              </div>
+            </div>
+            <canvas id="levelChart" aria-label="Level distribution"></canvas>
+          </article>
+
           <article class="panel table-panel">
             <div class="panel-head">
               <div>
-                <p class="section-kicker">Leaderboard</p>
-                <h2>Top games in range</h2>
+                <p class="section-kicker">Platform Breakdown</p>
+                <h2>Active user summary</h2>
               </div>
             </div>
 
@@ -198,11 +193,11 @@
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Game</th>
-                    <th>Revenue</th>
-                    <th>Downloads</th>
-                    <th>Spend</th>
-                    <th>ROAS</th>
+                    <th>Platform</th>
+                    <th>Profiles</th>
+                    <th>Avg Level</th>
+                    <th>Avg Power Uses</th>
+                    <th>Avg Tools</th>
                   </tr>
                 </thead>
                 <tbody id="summaryTableBody"></tbody>
@@ -210,197 +205,11 @@
             </div>
           </article>
 
-          <article class="panel table-panel">
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">Catalog</p>
-                <h2>Games in the dashboard</h2>
-              </div>
-            </div>
-
-            <div class="table-wrap">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Game</th>
-                    <th>Status</th>
-                    <th>Platforms</th>
-                    <th>Updated</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="gamesTableBody"></tbody>
-              </table>
-            </div>
-          </article>
-
-          <article class="panel form-panel">
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">Game Setup</p>
-                <h2>Create or update a title</h2>
-              </div>
-            </div>
-
-            <form id="gameForm" class="stack-form">
-              <input id="gameId" type="hidden" />
-
-              <label class="field">
-                <span>Game name</span>
-                <input id="gameName" type="text" placeholder="Zen Mahjong" required />
-              </label>
-
-              <label class="field">
-                <span>Slug</span>
-                <input id="gameSlug" type="text" placeholder="zen-mahjong" required />
-              </label>
-
-              <label class="field">
-                <span>Status</span>
-                <select id="gameStatus">
-                  <option value="live">Live</option>
-                  <option value="soft_launch">Soft launch</option>
-                  <option value="in_development">In development</option>
-                  <option value="sunset">Sunset</option>
-                </select>
-              </label>
-
-              <fieldset class="field fieldset">
-                <legend>Platforms</legend>
-                <label class="check-field">
-                  <input id="platformIos" type="checkbox" value="ios" checked />
-                  <span>iOS</span>
-                </label>
-                <label class="check-field">
-                  <input id="platformAndroid" type="checkbox" value="android" checked />
-                  <span>Android</span>
-                </label>
-              </fieldset>
-
-              <label class="field">
-                <span>App Store URL</span>
-                <input id="gameIosUrl" type="url" placeholder="https://apps.apple.com/..." />
-              </label>
-
-              <label class="field">
-                <span>Google Play URL</span>
-                <input id="gameAndroidUrl" type="url" placeholder="https://play.google.com/..." />
-              </label>
-
-              <label class="field">
-                <span>Notes</span>
-                <textarea id="gameNotes" rows="4" placeholder="Release notes, internal reminders, marketing comments"></textarea>
-              </label>
-
-              <div class="form-actions">
-                <button class="button button-primary" type="submit">Save game</button>
-                <button class="button button-secondary" id="resetGameForm" type="button">Clear</button>
-              </div>
-            </form>
-
-            <p class="panel-feedback" id="gameFeedback"></p>
-          </article>
-
-          <article class="panel form-panel">
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">Daily Input</p>
-                <h2>Enter one row per game, platform and day</h2>
-              </div>
-            </div>
-
-            <form id="metricForm" class="stack-form">
-              <label class="field">
-                <span>Game</span>
-                <select id="metricGame" required>
-                  <option value="">Select a game</option>
-                </select>
-              </label>
-
-              <label class="field">
-                <span>Platform</span>
-                <select id="metricPlatform" required>
-                  <option value="ios">iOS</option>
-                  <option value="android">Android</option>
-                </select>
-              </label>
-
-              <label class="field">
-                <span>Date</span>
-                <input id="metricDate" type="date" required />
-              </label>
-
-              <div class="field-grid">
-                <label class="field">
-                  <span>Downloads</span>
-                  <input id="metricDownloads" type="number" min="0" step="1" placeholder="0" />
-                </label>
-
-                <label class="field">
-                  <span>Total revenue</span>
-                  <input id="metricRevenue" type="number" min="0" step="0.01" placeholder="0" />
-                </label>
-
-                <label class="field">
-                  <span>Ad revenue</span>
-                  <input id="metricAdRevenue" type="number" min="0" step="0.01" placeholder="0" />
-                </label>
-
-                <label class="field">
-                  <span>IAP revenue</span>
-                  <input id="metricIapRevenue" type="number" min="0" step="0.01" placeholder="0" />
-                </label>
-
-                <label class="field">
-                  <span>Ad spend</span>
-                  <input id="metricAdSpend" type="number" min="0" step="0.01" placeholder="0" />
-                </label>
-
-                <label class="field">
-                  <span>DAU</span>
-                  <input id="metricDau" type="number" min="0" step="1" placeholder="0" />
-                </label>
-
-                <label class="field">
-                  <span>MAU</span>
-                  <input id="metricMau" type="number" min="0" step="1" placeholder="0" />
-                </label>
-
-                <label class="field">
-                  <span>Sessions</span>
-                  <input id="metricSessions" type="number" min="0" step="1" placeholder="0" />
-                </label>
-
-                <label class="field">
-                  <span>Store rating</span>
-                  <input id="metricRating" type="number" min="0" max="5" step="0.01" placeholder="0" />
-                </label>
-
-                <label class="field">
-                  <span>Crash-free users %</span>
-                  <input id="metricCrashFree" type="number" min="0" max="100" step="0.01" placeholder="100" />
-                </label>
-              </div>
-
-              <label class="field">
-                <span>Notes</span>
-                <textarea id="metricNotes" rows="4" placeholder="Big campaign, featuring, store update, event notes"></textarea>
-              </label>
-
-              <div class="form-actions">
-                <button class="button button-primary" type="submit">Save daily metric</button>
-                <button class="button button-secondary" id="resetMetricForm" type="button">Clear</button>
-              </div>
-            </form>
-
-            <p class="panel-feedback" id="metricFeedback"></p>
-          </article>
-
           <article class="panel table-panel chart-span-2">
             <div class="panel-head">
               <div>
-                <p class="section-kicker">Recent Entries</p>
-                <h2>Latest daily metric rows</h2>
+                <p class="section-kicker">Recent Players</p>
+                <h2>Recently updated profiles</h2>
               </div>
             </div>
 
@@ -408,16 +217,17 @@
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Game</th>
+                    <th>User ID</th>
                     <th>Platform</th>
-                    <th>Revenue</th>
-                    <th>Downloads</th>
-                    <th>Spend</th>
-                    <th></th>
+                    <th>Level</th>
+                    <th>Hints</th>
+                    <th>Shuffles</th>
+                    <th>Undos</th>
+                    <th>Tools</th>
+                    <th>Updated</th>
                   </tr>
                 </thead>
-                <tbody id="metricsTableBody"></tbody>
+                <tbody id="recentUsersTableBody"></tbody>
               </table>
             </div>
           </article>
