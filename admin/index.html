@@ -142,6 +142,13 @@
               </select>
             </label>
 
+            <label class="field">
+              <span>Country</span>
+              <select id="countryFilter">
+                <option value="all">All countries</option>
+              </select>
+            </label>
+
             <button class="button button-secondary filter-action" id="refreshButton" type="button">
               <span class="button-spinner" aria-hidden="true"></span>
               Refresh
@@ -149,6 +156,7 @@
           </div>
 
           <p class="panel-feedback">Source: <code>users</code> + <code>studioDailyMetrics</code>. Player cohorts are derived from <code>level</code>, power usage and <code>updatedAt</code>; marketing metrics come from daily entries.</p>
+          <p class="panel-feedback" id="dashboardNotice" hidden></p>
         </section>
 
         <nav class="tab-nav" role="tablist" aria-label="Dashboard sections">
@@ -273,7 +281,7 @@
           </section>
 
           <section class="admin-grid">
-            <article class="panel table-panel chart-span-2">
+            <article class="panel table-panel">
               <div class="panel-head">
                 <div>
                   <p class="section-kicker">Platform Breakdown</p>
@@ -288,13 +296,36 @@
                       <th class="num">Profiles</th>
                       <th class="num">Share</th>
                       <th class="num">Avg Level</th>
-                      <th class="num">Avg Power Uses</th>
+                      <th class="num">Avg Powers</th>
                       <th class="num">Avg Tools</th>
                     </tr>
                   </thead>
                   <tbody id="summaryTableBody"></tbody>
                 </table>
               </div>
+            </article>
+
+            <article class="panel table-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Top Countries</p>
+                  <h2>Active by country</h2>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Country</th>
+                      <th class="num">Profiles</th>
+                      <th class="num">Share</th>
+                      <th class="num">Avg Level</th>
+                    </tr>
+                  </thead>
+                  <tbody id="topCountriesBody"></tbody>
+                </table>
+              </div>
+              <p class="panel-feedback" id="countryEmptyNote" hidden>No country field detected on user documents. Write a <code>country</code> (ISO-2 code) on user writes to unlock this breakdown.</p>
             </article>
 
             <article class="panel insight-panel">
@@ -378,6 +409,34 @@
                 </div>
               </div>
               <canvas id="recencyChart" aria-label="Recency distribution"></canvas>
+            </article>
+          </section>
+
+          <section class="admin-grid">
+            <article class="panel table-panel chart-span-3">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Cohort Longevity</p>
+                  <h2>Install week · seen on or after each milestone</h2>
+                </div>
+                <div class="panel-meta">Last 8 weekly cohorts</div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table retention-table">
+                  <thead>
+                    <tr>
+                      <th>Install week</th>
+                      <th class="num">Cohort size</th>
+                      <th class="num">Seen ≥ D1</th>
+                      <th class="num">Seen ≥ D7</th>
+                      <th class="num">Seen ≥ D14</th>
+                      <th class="num">Seen ≥ D30</th>
+                    </tr>
+                  </thead>
+                  <tbody id="retentionBody"></tbody>
+                </table>
+              </div>
+              <p class="panel-feedback" id="retentionNote" hidden></p>
             </article>
           </section>
 
@@ -623,6 +682,31 @@
                     </tr>
                   </thead>
                   <tbody id="marketingPlatformBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+
+          <section class="admin-grid">
+            <article class="panel table-panel chart-span-3">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Country Performance</p>
+                  <h2>Revenue, spend and ROAS by country</h2>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Country</th>
+                      <th class="num">Revenue</th>
+                      <th class="num">Spend</th>
+                      <th class="num">ROAS</th>
+                      <th class="num">Installs</th>
+                    </tr>
+                  </thead>
+                  <tbody id="countryMarketingBody"></tbody>
                 </table>
               </div>
             </article>

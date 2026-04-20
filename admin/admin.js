@@ -68,6 +68,11 @@ const state = {
   users: [],
   games: [],
   metrics: [],
+  loadErrors: {
+    users: null,
+    games: null,
+    metrics: null
+  },
   charts: {},
   activeTab: "overview",
   trendMode: "users",
@@ -94,16 +99,17 @@ function cacheEls() {
     "authScreen", "configBanner", "sessionBadge", "sessionBadgeLabel",
     "logoutButton", "loginPanel", "appPanel", "loginForm",
     "loginButton", "loginEmail", "loginPassword", "authFeedback",
-    "rangePreset", "rangeStart", "rangeEnd", "platformFilter", "segmentFilter",
-    "refreshButton", "dataFreshness",
+    "rangePreset", "rangeStart", "rangeEnd", "platformFilter", "segmentFilter", "countryFilter",
+    "refreshButton", "dataFreshness", "dashboardNotice",
     // Overview KPIs
     "kpiTotalProfiles", "kpiTotalProfilesDelta",
     "kpiActiveProfiles", "kpiActiveProfilesDelta",
     "kpiAvgLevel", "kpiAvgLevelDelta",
     "kpiEngagement", "kpiEngagementDelta",
     "kpiRevenue", "kpiRevenueDelta",
-    "summaryTableBody", "pulseList", "platformLegend",
+    "summaryTableBody", "pulseList", "platformLegend", "topCountriesBody", "countryEmptyNote",
     // Users
+    "retentionBody", "retentionNote",
     "segWhales", "segWhalesBar",
     "segPro", "segProBar",
     "segCasual", "segCasualBar",
@@ -114,6 +120,7 @@ function cacheEls() {
     "kpiLvlAvg", "kpiLvlMedian", "kpiLvlP75", "kpiLvlMax",
     "progressionFunnel", "levelCohortBody",
     // Marketing
+    "countryMarketingBody",
     "mkRevenue", "mkRevenueDelta",
     "mkSpend", "mkSpendDelta",
     "mkRoas", "mkRoasDelta",
@@ -132,6 +139,7 @@ function wireEvents() {
   els.rangeEnd.addEventListener("change", handleManualRangeChange);
   els.platformFilter.addEventListener("change", renderDashboard);
   els.segmentFilter.addEventListener("change", renderDashboard);
+  if (els.countryFilter) els.countryFilter.addEventListener("change", renderDashboard);
   els.refreshButton.addEventListener("click", () => {
     refreshAll().catch(handleDashboardError);
   });
@@ -271,6 +279,7 @@ async function refreshAll() {
   els.refreshButton.classList.add("is-loading");
   try {
     await Promise.all([loadUsers(), loadGames(), loadMetrics()]);
+    populateCountryOptions();
     renderDashboard();
     els.dataFreshness.textContent = `Last synced ${formatDateTime(new Date())}`;
   } finally {
@@ -278,31 +287,111 @@ async function refreshAll() {
   }
 }
 
+function populateCountryOptions() {
+  if (!els.countryFilter) return;
+  const previous = els.countryFilter.value || "all";
+  const counts = new Map();
+  state.users.forEach((u) => {
+    const k = u.country || "unknown";
+    counts.set(k, (counts.get(k) || 0) + 1);
+  });
+  const entries = Array.from(counts.entries())
+    .filter(([code]) => code && code !== "unknown")
+    .sort((a, b) => b[1] - a[1]);
+  const unknownCount = counts.get("unknown") || 0;
+  const options = [
+    `<option value="all">All countries</option>`,
+    ...entries.map(([code, count]) =>
+      `<option value="${escapeHtml(code)}">${countryFlag(code)} ${escapeHtml(countryLabel(code))} · ${formatNumber(count)}</option>`
+    )
+  ];
+  if (unknownCount > 0) {
+    options.push(`<option value="unknown">🌍 Unknown · ${formatNumber(unknownCount)}</option>`);
+  }
+  els.countryFilter.innerHTML = options.join("");
+  els.countryFilter.value = Array.from(counts.keys()).concat(["all"]).includes(previous) ? previous : "all";
+}
+
+function renderDashboardNotice() {
+  if (!els.dashboardNotice) return;
+
+  const notes = [];
+  if (state.loadErrors.users) notes.push(state.loadErrors.users);
+  if (state.loadErrors.games) notes.push(state.loadErrors.games);
+  if (state.loadErrors.metrics) notes.push(state.loadErrors.metrics);
+
+  const country = els.countryFilter ? els.countryFilter.value : "all";
+  if (!state.loadErrors.metrics && country !== "all") {
+    const coverage = getMetricCountryCoverage(getRangeBounds());
+    if (coverage.total > 0) {
+      if (coverage.known === 0) {
+        notes.push("Country-scoped marketing is unavailable because no studioDailyMetrics rows in this window carry a country field yet.");
+      } else if (coverage.known < coverage.total) {
+        notes.push(`Country-scoped marketing is partial: ${formatNumber(coverage.known)} of ${formatNumber(coverage.total)} daily metric rows in this window include country.`);
+      }
+    }
+  }
+
+  if (!notes.length) {
+    els.dashboardNotice.hidden = true;
+    els.dashboardNotice.textContent = "";
+    els.dashboardNotice.classList.remove("is-error");
+    return;
+  }
+
+  els.dashboardNotice.hidden = false;
+  els.dashboardNotice.textContent = notes.join(" ");
+  els.dashboardNotice.classList.toggle("is-error", Boolean(state.loadErrors.users || state.loadErrors.games || state.loadErrors.metrics));
+}
+
 async function loadUsers() {
   const usersCollection = config.collections.users || "users";
-  const snapshot = await getDocs(collection(state.db, usersCollection));
-  state.users = snapshot.docs
-    .map((snapshotDoc) => normalizeUser(snapshotDoc.id, snapshotDoc.data()))
-    .sort((l, r) => compareDates(r.updatedAt, l.updatedAt));
+  state.loadErrors.users = null;
+  try {
+    const snapshot = await getDocs(collection(state.db, usersCollection));
+    state.users = snapshot.docs
+      .map((snapshotDoc) => normalizeUser(snapshotDoc.id, snapshotDoc.data()))
+      .sort((l, r) => compareDates(r.updatedAt, l.updatedAt));
+  } catch (error) {
+    state.users = [];
+    state.loadErrors.users = formatCollectionLoadError(
+      usersCollection,
+      error,
+      "Player analytics are unavailable until this collection becomes readable."
+    );
+    throw error;
+  }
 }
 
 async function loadGames() {
+  state.loadErrors.games = null;
   try {
     const name = config.collections.games || "studioGames";
     const snap = await getDocs(collection(state.db, name));
     state.games = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch {
+  } catch (error) {
     state.games = [];
+    state.loadErrors.games = formatCollectionLoadError(
+      config.collections.games || "studioGames",
+      error,
+      "Game mix cards and tables may look empty until access is fixed."
+    );
   }
 }
 
 async function loadMetrics() {
+  state.loadErrors.metrics = null;
   try {
     const name = config.collections.dailyMetrics || "studioDailyMetrics";
     const snap = await getDocs(collection(state.db, name));
     state.metrics = snap.docs.map((d) => normalizeMetric(d.id, d.data()));
-  } catch {
+  } catch (error) {
     state.metrics = [];
+    state.loadErrors.metrics = formatCollectionLoadError(
+      config.collections.dailyMetrics || "studioDailyMetrics",
+      error,
+      "Marketing KPIs are unavailable until this collection becomes readable."
+    );
   }
 }
 
@@ -314,6 +403,11 @@ function normalizeUser(id, payload = {}) {
   const undoCount = readNumber(payload.undoCount);
   const toolsUnlockedCount = readNumber(payload.toolsUnlockedCount);
   const powerUses = hintCount + shuffleCount + undoCount;
+  const rawCountry =
+    payload.country ||
+    payload.lastSeenCountry ||
+    payload.countryCode ||
+    (payload.geo && (payload.geo.country || payload.geo.countryCode));
   return {
     id,
     level,
@@ -323,8 +417,9 @@ function normalizeUser(id, payload = {}) {
     toolsUnlockedCount,
     schemaVersion: readNumber(payload.schemaVersion),
     lastSeenPlatform: normalizePlatform(payload.lastSeenPlatform),
+    country: normalizeCountry(rawCountry),
     updatedAt: parseDate(payload.updatedAt),
-    createdAt: parseDate(payload.createdAt),
+    createdAt: parseDate(payload.createdAt) || parseDate(payload.firstSeenAt) || parseDate(payload.installDate),
     powerUses,
     engagementScore: computeEngagement(level, powerUses, toolsUnlockedCount),
     segment: computeSegment(level, powerUses)
@@ -338,6 +433,7 @@ function normalizeMetric(id, payload = {}) {
     gameName: payload.gameName || "",
     gameSlug: payload.gameSlug || "",
     platform: normalizePlatform(payload.platform),
+    country: normalizeCountry(payload.country || payload.countryCode),
     date: parseDate(payload.date),
     downloads: readNumber(payload.downloads),
     revenue: readNumber(payload.revenue),
@@ -372,6 +468,41 @@ function normalizePlatform(value) {
   return s;
 }
 
+function normalizeCountry(value) {
+  if (!value) return "unknown";
+  const s = String(value).trim().toUpperCase();
+  if (s.length === 2 && /^[A-Z]{2}$/.test(s)) return s;
+  if (s.length === 3 && /^[A-Z]{3}$/.test(s)) {
+    const map = { USA: "US", GBR: "GB", TUR: "TR", DEU: "DE", FRA: "FR", ESP: "ES", ITA: "IT", RUS: "RU", JPN: "JP", KOR: "KR", CHN: "CN", IND: "IN", BRA: "BR", MEX: "MX", CAN: "CA", AUS: "AU", NLD: "NL" };
+    return map[s] || s.slice(0, 2);
+  }
+  return "unknown";
+}
+
+function countryFlag(code) {
+  if (!code || code === "unknown" || code.length !== 2) return "🌍";
+  const base = 127397;
+  return String.fromCodePoint(...[...code.toUpperCase()].map((c) => base + c.charCodeAt(0)));
+}
+
+const COUNTRY_NAMES = {
+  US: "United States", GB: "United Kingdom", TR: "Türkiye", DE: "Germany",
+  FR: "France", ES: "Spain", IT: "Italy", NL: "Netherlands", PL: "Poland",
+  RU: "Russia", JP: "Japan", KR: "Korea", CN: "China", IN: "India",
+  BR: "Brazil", MX: "Mexico", CA: "Canada", AU: "Australia", SE: "Sweden",
+  NO: "Norway", DK: "Denmark", FI: "Finland", CH: "Switzerland", AT: "Austria",
+  BE: "Belgium", IE: "Ireland", PT: "Portugal", GR: "Greece", CZ: "Czechia",
+  RO: "Romania", HU: "Hungary", UA: "Ukraine", IL: "Israel", SA: "Saudi Arabia",
+  AE: "UAE", EG: "Egypt", ZA: "South Africa", AR: "Argentina", CL: "Chile",
+  CO: "Colombia", ID: "Indonesia", TH: "Thailand", VN: "Vietnam", PH: "Philippines",
+  MY: "Malaysia", SG: "Singapore", NZ: "New Zealand"
+};
+
+function countryLabel(code) {
+  if (!code || code === "unknown") return "Unknown";
+  return COUNTRY_NAMES[code] || code;
+}
+
 // ====== Range helpers ======
 function getRangeBounds() {
   const start = new Date(`${els.rangeStart.value}T00:00:00`);
@@ -395,8 +526,12 @@ function isDateInRange(d, bounds) {
 // ====== Filtering ======
 function getUsersForPlatform() {
   const p = els.platformFilter.value;
-  if (p === "all") return state.users;
-  return state.users.filter((u) => u.lastSeenPlatform === p);
+  const c = els.countryFilter ? els.countryFilter.value : "all";
+  return state.users.filter((u) => {
+    if (p !== "all" && u.lastSeenPlatform !== p) return false;
+    if (c !== "all" && u.country !== c) return false;
+    return true;
+  });
 }
 
 function applySegmentFilter(users) {
@@ -426,11 +561,26 @@ function getPreviousActiveUsers() {
 
 function getMetricsInRange(bounds) {
   const p = els.platformFilter.value;
+  const c = els.countryFilter ? els.countryFilter.value : "all";
   return state.metrics.filter((m) => {
+    if (!isDateInRange(m.date, bounds)) return false;
+    if (p !== "all" && m.platform !== p) return false;
+    if (c !== "all" && m.country !== c) return false;
+    return true;
+  });
+}
+
+function getMetricCountryCoverage(bounds) {
+  const p = els.platformFilter.value;
+  const relevant = state.metrics.filter((m) => {
     if (!isDateInRange(m.date, bounds)) return false;
     if (p !== "all" && m.platform !== p) return false;
     return true;
   });
+  return {
+    total: relevant.length,
+    known: relevant.filter((m) => m.country && m.country !== "unknown").length
+  };
 }
 
 // ====== Render ======
@@ -443,6 +593,7 @@ function renderDashboard() {
   renderUsersTab(active, scoped);
   renderLevelsTab(active);
   renderMarketingTab();
+  renderDashboardNotice();
 }
 
 // ---- Overview ----
@@ -475,6 +626,35 @@ function renderOverview(active, prevActive, scoped) {
   renderPlatformChart(platformRows);
   renderTrendChart();
   renderPulseList(active, scoped, metricsCurrent, metricsPrev);
+  renderTopCountriesTable(active);
+}
+
+function renderTopCountriesTable(users) {
+  if (!els.topCountriesBody) return;
+  const rows = buildCountryRows(users);
+  const total = users.length || 1;
+  const hasKnown = rows.some((r) => r.country !== "unknown");
+
+  if (!rows.length) {
+    els.topCountriesBody.innerHTML = `<tr><td colspan="4" class="table-empty">No active users in this range.</td></tr>`;
+    if (els.countryEmptyNote) els.countryEmptyNote.hidden = true;
+    return;
+  }
+  if (!hasKnown && els.countryEmptyNote) {
+    els.countryEmptyNote.hidden = false;
+  } else if (els.countryEmptyNote) {
+    els.countryEmptyNote.hidden = true;
+  }
+
+  const top = rows.slice(0, 8);
+  els.topCountriesBody.innerHTML = top.map((r) => `
+    <tr>
+      <td><span class="country-cell">${countryFlag(r.country)} <strong>${escapeHtml(countryLabel(r.country))}</strong></span></td>
+      <td class="num">${formatNumber(r.profiles)}</td>
+      <td class="num">${((r.profiles / total) * 100).toFixed(1)}%</td>
+      <td class="num">${formatDecimal(r.avgLevel)}</td>
+    </tr>
+  `).join("");
 }
 
 function setKpi(valueEl, deltaEl, curr, prev, kind) {
@@ -598,7 +778,63 @@ function renderUsersTab(active, scoped) {
   renderPowerChart(active);
   renderToolsChart(active);
   renderRecencyChart(scoped);
+  renderRetentionMatrix(scoped);
   renderTopPlayersTable();
+}
+
+function renderRetentionMatrix(users) {
+  if (!els.retentionBody) return;
+  const matrix = buildCohortMatrix(users, 8);
+  const haveCreatedAtRatio = matrix.totalUsers > 0 ? matrix.withCreatedAt / matrix.totalUsers : 0;
+
+  if (els.retentionNote) {
+    if (matrix.withCreatedAt === 0) {
+      els.retentionNote.textContent = "No createdAt / firstSeenAt values found on user documents. Write one of those fields on first session to enable cohort retention.";
+      els.retentionNote.hidden = false;
+    } else {
+      const notes = [
+        "Uses install date and the latest updatedAt timestamp only. Cells show the share of each cohort seen on or after D1 / D7 / D14 / D30, not exact same-day retention."
+      ];
+      if (haveCreatedAtRatio < 0.6) {
+        notes.push(`Only ${Math.round(haveCreatedAtRatio * 100)}% of profiles carry an install date, so these cohorts are based on that subset.`);
+      }
+      els.retentionNote.textContent = notes.join(" ");
+      els.retentionNote.hidden = false;
+    }
+  }
+
+  const nonEmpty = matrix.rows.filter((r) => r.size > 0);
+  if (!nonEmpty.length) {
+    els.retentionBody.innerHTML = `<tr><td colspan="6" class="table-empty">No install cohorts found for the last 8 weeks.</td></tr>`;
+    return;
+  }
+
+  els.retentionBody.innerHTML = matrix.rows.map((r) => {
+    if (!r.size) {
+      return `<tr class="retention-empty"><td>${escapeHtml(r.label)}</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
+    }
+    return `
+      <tr>
+        <td>${escapeHtml(r.label)}</td>
+        <td class="num">${formatNumber(r.size)}</td>
+        <td class="num">${retentionCell(r.d1)}</td>
+        <td class="num">${retentionCell(r.d7)}</td>
+        <td class="num">${retentionCell(r.d14)}</td>
+        <td class="num">${retentionCell(r.d30)}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function retentionCell(metric) {
+  if (!metric || metric.ratio == null) return "—";
+  const ratio = metric.ratio;
+  const pct = (ratio * 100);
+  const label = `${pct.toFixed(pct >= 10 ? 0 : 1)}%`;
+  const alpha = Math.min(0.62, 0.08 + ratio * 0.6).toFixed(3);
+  const style = `background: rgba(142, 214, 175, ${alpha});`;
+  const title = `${formatNumber(metric.retained)} of ${formatNumber(metric.eligible)} eligible profiles were seen on or after D${metric.days}.`;
+  return `<span class="retention-chip" style="${style}" title="${escapeHtml(title)}">${label}</span>`;
 }
 
 function renderTopPlayersTable() {
@@ -722,7 +958,43 @@ function renderMarketingTab() {
   renderSpendRevenueChart(current, bounds);
   renderStickinessChart(current, bounds);
   renderMarketingPlatformTable(current);
+  renderCountryMarketingTable(current);
   renderGamesTable(current);
+}
+
+function renderCountryMarketingTable(metrics) {
+  if (!els.countryMarketingBody) return;
+  const selectedCountry = els.countryFilter ? els.countryFilter.value : "all";
+  const coverage = getMetricCountryCoverage(getRangeBounds());
+  const hasCountry = metrics.some((m) => m.country && m.country !== "unknown");
+  if (selectedCountry !== "all" && coverage.total > 0 && coverage.known === 0) {
+    els.countryMarketingBody.innerHTML = `<tr><td colspan="5" class="table-empty">Country filter is active, but no daily metric rows in this window carry <code>country</code> yet.</td></tr>`;
+    return;
+  }
+  if (!hasCountry) {
+    els.countryMarketingBody.innerHTML = `<tr><td colspan="5" class="table-empty">No country field on daily metrics yet. Add <code>country</code> to studioDailyMetrics docs to unlock per-country revenue/ROAS.</td></tr>`;
+    return;
+  }
+
+  const rows = buildCountryMarketingRows(metrics).slice(0, 10);
+  if (!rows.length) {
+    els.countryMarketingBody.innerHTML = `<tr><td colspan="5" class="table-empty">${
+      selectedCountry !== "all"
+        ? `No country-scoped marketing data matched ${escapeHtml(countryLabel(selectedCountry))} in this window.`
+        : "No marketing data in this window."
+    }</td></tr>`;
+    return;
+  }
+
+  els.countryMarketingBody.innerHTML = rows.map((r) => `
+    <tr>
+      <td><span class="country-cell">${countryFlag(r.country)} <strong>${escapeHtml(countryLabel(r.country))}</strong></span></td>
+      <td class="num">${formatCurrency(r.revenue)}</td>
+      <td class="num">${formatCurrency(r.spend)}</td>
+      <td class="num">${r.spend > 0 ? r.roas.toFixed(2) + "×" : "—"}</td>
+      <td class="num">${formatNumber(r.downloads)}</td>
+    </tr>
+  `).join("");
 }
 
 function renderMarketingPlatformTable(metrics) {
@@ -1258,6 +1530,101 @@ function gradientBars(canvasId, top, bottom) {
 }
 
 // ====== Misc helpers ======
+function buildCohortMatrix(users, weeksBack = 8) {
+  const now = new Date();
+  now.setHours(23, 59, 59, 999);
+  const weeks = [];
+  for (let i = weeksBack - 1; i >= 0; i--) {
+    const end = new Date(now);
+    end.setDate(end.getDate() - i * 7);
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+    weeks.push({ start, end });
+  }
+
+  let withCreatedAt = 0;
+  users.forEach((u) => { if (u.createdAt) withCreatedAt++; });
+
+  const rows = weeks.map((week) => {
+    const cohort = users.filter((u) => u.createdAt && u.createdAt >= week.start && u.createdAt <= week.end);
+    const size = cohort.length;
+    return {
+      label: shortWeekLabel(week.start),
+      start: week.start,
+      end: week.end,
+      size,
+      d1: buildCohortMilestone(cohort, 1, now),
+      d7: buildCohortMilestone(cohort, 7, now),
+      d14: buildCohortMilestone(cohort, 14, now),
+      d30: buildCohortMilestone(cohort, 30, now)
+    };
+  });
+
+  return { rows, withCreatedAt, totalUsers: users.length };
+}
+
+function buildCohortMilestone(cohort, days, now) {
+  const thresholdMs = days * 864e5;
+  const eligible = cohort.filter((u) => u.createdAt && (now.getTime() - u.createdAt.getTime()) >= thresholdMs);
+  if (!eligible.length) {
+    return { days, eligible: 0, retained: 0, ratio: null };
+  }
+
+  const retained = eligible.filter((u) => u.updatedAt && (u.updatedAt.getTime() - u.createdAt.getTime()) >= thresholdMs).length;
+  return {
+    days,
+    eligible: eligible.length,
+    retained,
+    ratio: retained / eligible.length
+  };
+}
+
+function shortWeekLabel(start) {
+  const d = new Date(start);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${m}/${day}`;
+}
+
+function buildCountryRows(users) {
+  const map = new Map();
+  users.forEach((u) => {
+    const key = u.country || "unknown";
+    const entry = map.get(key) || { country: key, profiles: 0, levelSum: 0, engSum: 0, whales: 0 };
+    entry.profiles++;
+    entry.levelSum += u.level;
+    entry.engSum += u.engagementScore;
+    if (u.segment === "whale") entry.whales++;
+    map.set(key, entry);
+  });
+  return Array.from(map.values())
+    .map((e) => ({
+      country: e.country,
+      profiles: e.profiles,
+      avgLevel: e.profiles ? e.levelSum / e.profiles : 0,
+      avgEngagement: e.profiles ? e.engSum / e.profiles : 0,
+      whales: e.whales
+    }))
+    .sort((a, b) => b.profiles - a.profiles);
+}
+
+function buildCountryMarketingRows(metrics) {
+  const map = new Map();
+  metrics.forEach((m) => {
+    const key = m.country || "unknown";
+    const entry = map.get(key) || { country: key, revenue: 0, spend: 0, downloads: 0 };
+    entry.revenue += m.revenue || (m.adRevenue + m.iapRevenue);
+    entry.spend += m.adSpend;
+    entry.downloads += m.downloads;
+    map.set(key, entry);
+  });
+  return Array.from(map.values())
+    .map((e) => ({ ...e, roas: e.spend > 0 ? e.revenue / e.spend : 0 }))
+    .sort((a, b) => b.revenue - a.revenue);
+}
+
 function buildPlatformRows(users) {
   const map = new Map();
   users.forEach((u) => {
@@ -1416,6 +1783,21 @@ function handleDashboardError(error) {
     : error.message || "Unexpected Firebase error.";
   els.dataFreshness.textContent = msg;
   setAuthFeedback(msg, "error");
+  if (els.dashboardNotice) {
+    els.dashboardNotice.hidden = false;
+    els.dashboardNotice.textContent = msg;
+    els.dashboardNotice.classList.add("is-error");
+  }
+}
+
+function formatCollectionLoadError(collectionName, error, fallback) {
+  if (error?.code === "permission-denied") {
+    return `Firestore blocked reads for ${collectionName}. ${fallback}`;
+  }
+  if (error?.code) {
+    return `${collectionName} failed to load (${error.code}). ${fallback}`;
+  }
+  return `${collectionName} failed to load. ${fallback}`;
 }
 
 // ====== Formatting ======

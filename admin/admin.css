@@ -504,7 +504,7 @@ h1, h2, h3 {
 /* ==== Filter grid ==== */
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 14px;
   align-items: end;
 }
@@ -1090,6 +1090,43 @@ h1, h2, h3 {
   font-style: italic;
 }
 
+/* ==== Country cell ==== */
+.country-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.92rem;
+}
+
+.country-cell strong {
+  font-weight: 600;
+}
+
+/* ==== Retention matrix ==== */
+.retention-table td.num {
+  padding: 10px 12px;
+}
+
+.retention-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.84rem;
+  color: var(--text);
+  border: 1px solid rgba(142, 214, 175, 0.2);
+  background: rgba(142, 214, 175, 0.08);
+}
+
+.retention-table tr.retention-empty td {
+  color: var(--text-subtle);
+}
+
 /* ==== Misc ==== */
 code {
   padding: 2px 6px;
@@ -1112,6 +1149,10 @@ code {
 .panel-feedback.is-success { color: var(--green); }
 
 /* ==== Responsive ==== */
+@media (max-width: 1400px) {
+  .filter-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
 @media (max-width: 1240px) {
   .filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
