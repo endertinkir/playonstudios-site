@@ -396,6 +396,10 @@ async function loadMetrics() {
 }
 
 // ====== Normalization ======
+// Country trust tiers:
+//   "verified"  → field written once on first launch from the store context (installCountry / storeCountry / downloadCountry)
+//   "inferred"  → only a generic `country` / `countryCode` field, may drift with VPN/roaming
+//   "unknown"   → nothing usable
 function normalizeUser(id, payload = {}) {
   const level = readNumber(payload.level);
   const hintCount = readNumber(payload.hintCount);
@@ -403,11 +407,29 @@ function normalizeUser(id, payload = {}) {
   const undoCount = readNumber(payload.undoCount);
   const toolsUnlockedCount = readNumber(payload.toolsUnlockedCount);
   const powerUses = hintCount + shuffleCount + undoCount;
-  const rawCountry =
+
+  const verifiedRaw =
+    payload.installCountry ||
+    payload.downloadCountry ||
+    payload.storeCountry ||
+    (payload.install && (payload.install.country || payload.install.countryCode));
+  const inferredRaw =
     payload.country ||
     payload.lastSeenCountry ||
     payload.countryCode ||
     (payload.geo && (payload.geo.country || payload.geo.countryCode));
+
+  let country = "unknown";
+  let countryTrust = "unknown";
+  if (verifiedRaw) {
+    country = normalizeCountry(verifiedRaw);
+    if (country !== "unknown") countryTrust = "verified";
+  }
+  if (countryTrust === "unknown" && inferredRaw) {
+    country = normalizeCountry(inferredRaw);
+    if (country !== "unknown") countryTrust = "inferred";
+  }
+
   return {
     id,
     level,
@@ -417,7 +439,8 @@ function normalizeUser(id, payload = {}) {
     toolsUnlockedCount,
     schemaVersion: readNumber(payload.schemaVersion),
     lastSeenPlatform: normalizePlatform(payload.lastSeenPlatform),
-    country: normalizeCountry(rawCountry),
+    country,
+    countryTrust,
     updatedAt: parseDate(payload.updatedAt),
     createdAt: parseDate(payload.createdAt) || parseDate(payload.firstSeenAt) || parseDate(payload.installDate),
     powerUses,
@@ -427,13 +450,19 @@ function normalizeUser(id, payload = {}) {
 }
 
 function normalizeMetric(id, payload = {}) {
+  // Prefer store-reported country (Play Console / App Store Connect export) over generic "country".
+  const verifiedRaw = payload.downloadCountry || payload.storeCountry || payload.installCountry;
+  const inferredRaw = payload.country || payload.countryCode;
+  const rawCountry = verifiedRaw || inferredRaw;
+  const countryTrust = verifiedRaw ? "verified" : (inferredRaw ? "inferred" : "unknown");
   return {
     id,
     gameId: payload.gameId || "",
     gameName: payload.gameName || "",
     gameSlug: payload.gameSlug || "",
     platform: normalizePlatform(payload.platform),
-    country: normalizeCountry(payload.country || payload.countryCode),
+    country: normalizeCountry(rawCountry),
+    countryTrust,
     date: parseDate(payload.date),
     downloads: readNumber(payload.downloads),
     revenue: readNumber(payload.revenue),
@@ -793,7 +822,7 @@ function renderRetentionMatrix(users) {
       els.retentionNote.hidden = false;
     } else {
       const notes = [
-        "Uses install date and the latest updatedAt timestamp only. Cells show the share of each cohort seen on or after D1 / D7 / D14 / D30, not exact same-day retention."
+        "Uses install date and the latest updatedAt timestamp only. Cells show the share of each cohort still seen on or after D1 / D3 / D7 / D14 / D30 — rolling retention, not exact same-day retention."
       ];
       if (haveCreatedAtRatio < 0.6) {
         notes.push(`Only ${Math.round(haveCreatedAtRatio * 100)}% of profiles carry an install date, so these cohorts are based on that subset.`);
@@ -805,19 +834,20 @@ function renderRetentionMatrix(users) {
 
   const nonEmpty = matrix.rows.filter((r) => r.size > 0);
   if (!nonEmpty.length) {
-    els.retentionBody.innerHTML = `<tr><td colspan="6" class="table-empty">No install cohorts found for the last 8 weeks.</td></tr>`;
+    els.retentionBody.innerHTML = `<tr><td colspan="7" class="table-empty">No install cohorts found for the last 8 weeks.</td></tr>`;
     return;
   }
 
   els.retentionBody.innerHTML = matrix.rows.map((r) => {
     if (!r.size) {
-      return `<tr class="retention-empty"><td>${escapeHtml(r.label)}</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
+      return `<tr class="retention-empty"><td>${escapeHtml(r.label)}</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
     }
     return `
       <tr>
         <td>${escapeHtml(r.label)}</td>
         <td class="num">${formatNumber(r.size)}</td>
         <td class="num">${retentionCell(r.d1)}</td>
+        <td class="num">${retentionCell(r.d3)}</td>
         <td class="num">${retentionCell(r.d7)}</td>
         <td class="num">${retentionCell(r.d14)}</td>
         <td class="num">${retentionCell(r.d30)}</td>
@@ -968,12 +998,13 @@ function renderCountryMarketingTable(metrics) {
   const selectedCountry = els.countryFilter ? els.countryFilter.value : "all";
   const coverage = getMetricCountryCoverage(getRangeBounds());
   const hasCountry = metrics.some((m) => m.country && m.country !== "unknown");
+
   if (selectedCountry !== "all" && coverage.total > 0 && coverage.known === 0) {
-    els.countryMarketingBody.innerHTML = `<tr><td colspan="5" class="table-empty">Country filter is active, but no daily metric rows in this window carry <code>country</code> yet.</td></tr>`;
+    els.countryMarketingBody.innerHTML = `<tr><td colspan="5" class="table-empty">Country filter is active, but no daily metric rows in this window carry <code>downloadCountry</code> / <code>country</code> yet.</td></tr>`;
     return;
   }
   if (!hasCountry) {
-    els.countryMarketingBody.innerHTML = `<tr><td colspan="5" class="table-empty">No country field on daily metrics yet. Add <code>country</code> to studioDailyMetrics docs to unlock per-country revenue/ROAS.</td></tr>`;
+    els.countryMarketingBody.innerHTML = `<tr><td colspan="5" class="table-empty">No country field on daily metrics yet. Add <code>downloadCountry</code> (from Play Console or App Store Connect exports) to studioDailyMetrics docs to unlock per-country revenue/ROAS.</td></tr>`;
     return;
   }
 
@@ -1557,6 +1588,7 @@ function buildCohortMatrix(users, weeksBack = 8) {
       end: week.end,
       size,
       d1: buildCohortMilestone(cohort, 1, now),
+      d3: buildCohortMilestone(cohort, 3, now),
       d7: buildCohortMilestone(cohort, 7, now),
       d14: buildCohortMilestone(cohort, 14, now),
       d30: buildCohortMilestone(cohort, 30, now)

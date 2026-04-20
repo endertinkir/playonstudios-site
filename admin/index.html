@@ -10,11 +10,43 @@
   />
   <meta name="robots" content="noindex, nofollow" />
   <meta name="theme-color" content="#05080f" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net;
+    script-src-elem 'self' https://www.gstatic.com https://cdn.jsdelivr.net;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com data:;
+    img-src 'self' data: https://www.gstatic.com;
+    connect-src 'self'
+      https://*.googleapis.com
+      https://*.firebaseio.com
+      https://*.cloudfunctions.net
+      https://firebaseinstallations.googleapis.com
+      https://firebaseappcheck.googleapis.com;
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self';
+  " />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/admin/admin.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+  <!--
+    SRI: the `integrity` attribute is intentionally omitted because the hash must be
+    generated locally from the exact bytes your CDN serves. Generate with:
+      curl -sL https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js \
+        | openssl dgst -sha384 -binary | openssl base64 -A
+    Then paste the output back as integrity="sha384-<hash>".
+    See SECURITY.md → "Supply-chain pinning".
+  -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+    defer
+  ></script>
   <script type="module" src="/admin/admin.js"></script>
 </head>
 <body class="page-admin">
@@ -143,7 +175,7 @@
             </label>
 
             <label class="field">
-              <span>Country</span>
+              <span>Install country</span>
               <select id="countryFilter">
                 <option value="all">All countries</option>
               </select>
@@ -308,8 +340,8 @@
             <article class="panel table-panel">
               <div class="panel-head">
                 <div>
-                  <p class="section-kicker">Top Countries</p>
-                  <h2>Active by country</h2>
+                  <p class="section-kicker">Top Install Countries</p>
+                  <h2>Where profiles were first seen</h2>
                 </div>
               </div>
               <div class="table-wrap">
@@ -325,7 +357,7 @@
                   <tbody id="topCountriesBody"></tbody>
                 </table>
               </div>
-              <p class="panel-feedback" id="countryEmptyNote" hidden>No country field detected on user documents. Write a <code>country</code> (ISO-2 code) on user writes to unlock this breakdown.</p>
+              <p class="panel-feedback" id="countryEmptyNote" hidden>No country field detected on user documents. Write a write-once <code>installCountry</code> (ISO-2 code) at first launch to unlock a trusted breakdown.</p>
             </article>
 
             <article class="panel insight-panel">
@@ -428,6 +460,7 @@
                       <th>Install week</th>
                       <th class="num">Cohort size</th>
                       <th class="num">Seen ≥ D1</th>
+                      <th class="num">Seen ≥ D3</th>
                       <th class="num">Seen ≥ D7</th>
                       <th class="num">Seen ≥ D14</th>
                       <th class="num">Seen ≥ D30</th>
@@ -692,8 +725,8 @@
             <article class="panel table-panel chart-span-3">
               <div class="panel-head">
                 <div>
-                  <p class="section-kicker">Country Performance</p>
-                  <h2>Revenue, spend and ROAS by country</h2>
+                  <p class="section-kicker">Download Country Performance</p>
+                  <h2>Revenue, spend and ROAS by store-reported country</h2>
                 </div>
               </div>
               <div class="table-wrap">
