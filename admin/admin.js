@@ -76,7 +76,8 @@ const state = {
   charts: {},
   activeTab: "overview",
   trendMode: "users",
-  topMode: "engagement"
+  topMode: "engagement",
+  levelFunnelMode: "overall"
 };
 
 const els = {};
@@ -162,6 +163,13 @@ function wireEvents() {
       setActiveChip("#topPlayersChips", btn);
       state.topMode = btn.dataset.top;
       renderTopPlayersTable();
+    });
+  });
+  document.querySelectorAll("#levelFunnelChips .chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setActiveChip("#levelFunnelChips", btn);
+      state.levelFunnelMode = btn.dataset.funnel;
+      renderProgressionFunnel(getActiveUsers());
     });
   });
 }
@@ -926,6 +934,19 @@ function buildLevelRows(users) {
 }
 
 function renderProgressionFunnel(active) {
+  if (!els.progressionFunnel) return;
+
+  if (!active.length) {
+    els.progressionFunnel.classList.remove("is-detailed");
+    els.progressionFunnel.innerHTML = `<div class="funnel-empty">No active players in this window.</div>`;
+    return;
+  }
+
+  if (state.levelFunnelMode === "detailed") {
+    renderDetailedProgressionFunnel(active);
+    return;
+  }
+
   const totalStarted = active.filter((u) => u.level >= 1).length || active.length || 1;
   const html = FUNNEL_STAGES.map((stage) => {
     const count = active.filter((u) => u.level >= stage.minLevel).length;
@@ -938,7 +959,37 @@ function renderProgressionFunnel(active) {
       </div>
     `;
   }).join("");
+  els.progressionFunnel.classList.remove("is-detailed");
   els.progressionFunnel.innerHTML = html;
+}
+
+function renderDetailedProgressionFunnel(active) {
+  const counts = new Map();
+  active.forEach((u) => {
+    const level = Math.max(0, Math.floor(u.level || 0));
+    counts.set(level, (counts.get(level) || 0) + 1);
+  });
+
+  const maxLevel = Math.max(0, ...counts.keys());
+  const peakCount = Math.max(1, ...counts.values());
+  const total = active.length || 1;
+  const rows = [];
+
+  for (let level = 0; level <= maxLevel; level++) {
+    const count = counts.get(level) || 0;
+    const width = peakCount > 0 ? (count / peakCount) * 100 : 0;
+    const share = total > 0 ? (count / total) * 100 : 0;
+    rows.push(`
+      <div class="funnel-row">
+        <span class="funnel-label">L${level}</span>
+        <span class="funnel-bar"><span class="funnel-bar-fill" style="width:${width}%"></span></span>
+        <span class="funnel-count">${formatNumber(count)} · ${share.toFixed(1)}%</span>
+      </div>
+    `);
+  }
+
+  els.progressionFunnel.classList.add("is-detailed");
+  els.progressionFunnel.innerHTML = rows.join("");
 }
 
 function renderLevelCohortTable(levelRows, active) {

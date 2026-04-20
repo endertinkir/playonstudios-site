@@ -887,6 +887,12 @@ h1, h2, h3 {
   gap: 10px;
 }
 
+.funnel.is-detailed {
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
 .funnel-row {
   display: grid;
   grid-template-columns: 90px 1fr 80px;
@@ -894,11 +900,19 @@ h1, h2, h3 {
   gap: 12px;
 }
 
+.funnel.is-detailed .funnel-row {
+  grid-template-columns: 58px 1fr 112px;
+}
+
 .funnel-label {
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+}
+
+.funnel.is-detailed .funnel-label {
+  color: var(--text-muted);
 }
 
 .funnel-bar {
@@ -926,6 +940,17 @@ h1, h2, h3 {
   font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+}
+
+.funnel.is-detailed .funnel-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.funnel-empty {
+  padding: 14px 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 
 /* ==== Pulse list ==== */
