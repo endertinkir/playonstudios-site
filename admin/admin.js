@@ -846,7 +846,7 @@ function renderTopPlayersTable() {
   }).slice(0, 30);
 
   if (!sorted.length) {
-    els.topPlayersTableBody.innerHTML = `<tr><td colspan="10" class="table-empty">No players match this filter.</td></tr>`;
+    els.topPlayersTableBody.innerHTML = `<tr><td colspan="11" class="table-empty">No players match this filter.</td></tr>`;
     return;
   }
 
@@ -855,6 +855,7 @@ function renderTopPlayersTable() {
       <td><code>${escapeHtml(truncateId(u.id))}</code></td>
       <td><span class="segment-pill ${u.segment}">${segmentLabel(u.segment)}</span></td>
       <td><span class="platform-pill ${u.lastSeenPlatform}">${platformLabel(u.lastSeenPlatform)}</span></td>
+      <td><span class="country-cell" title="${escapeHtml(countryLabel(u.country))}">${countryFlag(u.country)} <strong>${escapeHtml(countryLabel(u.country))}</strong></span></td>
       <td class="num">${formatNumber(u.level)}</td>
       <td class="num">${formatNumber(u.hintCount)}</td>
       <td class="num">${formatNumber(u.shuffleCount)}</td>
