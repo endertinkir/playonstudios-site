@@ -10,7 +10,9 @@
     .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 28px; }
     a { color:#a5b4fc; }
     h1 { margin-top:0; }
-    p, li { line-height: 1.6; }
+    h2 { margin-top: 32px; }
+    p, li { line-height: 1.7; }
+    ul { padding-left: 20px; }
     code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 6px; }
     .lang-selector { margin-bottom: 20px; }
     .lang-selector select {
@@ -43,56 +45,111 @@
         </select>
       </div>
       <h1 data-i18n="privacyTitle">Privacy Policy</h1>
-      <p><strong data-i18n="privacyLastUpdated">Last updated:</strong> <span id="d"></span></p>
+      <p><strong data-i18n="privacyLastUpdated">Last updated:</strong> <span data-i18n="privacyLastUpdatedDate">2026-04-21</span></p>
 
       <p data-i18n="privacyIntro">
-        This Privacy Policy explains how <strong>Play On Studios</strong> ("we", "us") collects and uses information
-        when you use our mobile games and related services.
+        This Privacy Policy explains how Play On Studios ("Play On Studios", "we", "us", or "our") collects, uses,
+        and shares information when you use our mobile games, including Zen Mahjong, and related services.
       </p>
 
-      <h2 data-i18n="privacyInfo1Title">Information we may collect</h2>
+      <h2 data-i18n="privacyInfo1Title">Information We Collect</h2>
       <ul>
-        <li data-i18n="privacyInfo1Item1"><strong>Device and app information</strong> (e.g., device model, OS version, app version, language, country).</li>
-        <li data-i18n="privacyInfo1Item2"><strong>Gameplay events</strong> (e.g., level starts/completions, session activity) to improve game experience.</li>
-        <li data-i18n="privacyInfo1Item3"><strong>Crash and performance data</strong> to diagnose issues and improve stability.</li>
-        <li data-i18n="privacyInfo1Item4"><strong>Advertising data</strong> (e.g., ad impressions, interactions) if ads are shown in the game.</li>
+        <li data-i18n="privacyInfo1Item1">Device and technical information, such as device model, operating system, app version, language, country, IP address, and app or advertising identifiers.</li>
+        <li data-i18n="privacyInfo1Item2">Gameplay and analytics information, such as session activity, level starts and completions, feature usage, in-game events, and general interaction data.</li>
+        <li data-i18n="privacyInfo1Item3">Advertising and consent information, such as ad impressions, clicks, attribution data, advertising identifiers (where available), consent choices, and privacy settings selections.</li>
+        <li data-i18n="privacyInfo1Item4">Purchase information, such as product identifiers, transaction identifiers, purchase status, restore events, and entitlement status for in-app purchases or subscriptions.</li>
+        <li data-i18n="privacyInfo1Item5">Information you choose to provide if you contact us for support.</li>
       </ul>
 
-      <h2 data-i18n="privacyInfo2Title">How we use information</h2>
+      <h2 data-i18n="privacyInfo2Title">How We Use Information</h2>
       <ul>
-        <li data-i18n="privacyInfo2Item1">To provide and improve the game, balance difficulty, and enhance user experience.</li>
-        <li data-i18n="privacyInfo2Item2">To analyze performance and fix bugs.</li>
-        <li data-i18n="privacyInfo2Item3">To measure advertising performance (if applicable).</li>
+        <li data-i18n="privacyInfo2Item1">To operate, maintain, and improve our games and services.</li>
+        <li data-i18n="privacyInfo2Item2">To analyze gameplay, usage, and performance.</li>
+        <li data-i18n="privacyInfo2Item3">To deliver, measure, and optimize advertising.</li>
+        <li data-i18n="privacyInfo2Item4">To process purchases and restore entitlements.</li>
+        <li data-i18n="privacyInfo2Item5">To prevent fraud, abuse, and technical issues.</li>
+        <li data-i18n="privacyInfo2Item6">To comply with legal obligations.</li>
       </ul>
 
-      <h2 data-i18n="privacyInfo3Title">Third-party services</h2>
+      <h2 data-i18n="privacyInfo3Title">Advertising, Analytics, and Consent</h2>
       <p data-i18n="privacyInfo3Para1">
-        Our games may use third-party services that collect information to provide analytics and advertising, such as:
+        We use third-party analytics and advertising technologies, including Google Firebase Analytics, Google AdMob,
+        Meta/Facebook, RevenueCat, and advertising mediation or demand partners that may include Unity Ads, Vungle,
+        and Meta Audience Network.
+      </p>
+      <p data-i18n="privacyInfo3Para2">
+        Where required by law, we request user consent before using certain analytics or advertising features. Users
+        in supported regions may be able to manage ad-related privacy choices through the in-app Privacy Settings
+        screen and/or device settings.
+      </p>
+      <p data-i18n="privacyInfo3Para3">
+        On iOS, we may request permission under Apple's AppTrackingTransparency framework before accessing the
+        advertising identifier for tracking or advertising measurement.
+      </p>
+      <p data-i18n="privacyInfo3Para4">
+        If you consent to ad-related data use, Google and our advertising partners may use advertising identifiers,
+        app activity, and related signals for ad measurement, attribution, remarketing, personalization, bidding,
+        optimization, audience creation, and conversion measurement. Google may also associate consented activity
+        with information from users signed in to Google, subject to Google's own policies and user settings. Users
+        can learn more about Google's controls, including My Activity, at
+        <a href="https://myactivity.google.com/" rel="noopener noreferrer">https://myactivity.google.com/</a>.
+      </p>
+
+      <h2 data-i18n="privacyInfo4Title">Third-Party Services</h2>
+      <p data-i18n="privacyInfo4Para1">
+        Our games may use third-party SDKs and services, including:
       </p>
       <ul>
-        <li data-i18n="privacyInfo3Item1">Google Firebase (Analytics / Crash reporting)</li>
-        <li data-i18n="privacyInfo3Item2">Google AdMob (Advertising)</li>
+        <li data-i18n="privacyInfo4Item1">Google Firebase Analytics</li>
+        <li data-i18n="privacyInfo4Item2">Google AdMob and advertising mediation partners</li>
+        <li data-i18n="privacyInfo4Item3">Meta/Facebook SDK</li>
+        <li data-i18n="privacyInfo4Item4">RevenueCat</li>
+        <li data-i18n="privacyInfo4Item5">Apple App Store and Google Play billing/payment services</li>
       </ul>
-      <p data-i18n="privacyInfo3Para2">
-        These services may collect information as described in their own privacy policies.
+      <p data-i18n="privacyInfo4Para2">
+        These third parties may collect or receive information in accordance with their own privacy policies.
       </p>
 
-      <h2 data-i18n="privacyInfo4Title">Your choices</h2>
-      <p data-i18n="privacyInfo4Para">
-        You may limit certain data collection through your device settings (e.g., advertising preferences).
-        If required by law, we may show consent prompts in-app.
+      <h2 data-i18n="privacyInfo5Title">How We Share Information</h2>
+      <ul>
+        <li data-i18n="privacyInfo5Item1">With service providers, analytics providers, advertising partners, attribution providers, and payment or subscription providers that help us operate the game.</li>
+        <li data-i18n="privacyInfo5Item2">When required by law or when necessary to protect our rights, users, or services.</li>
+        <li data-i18n="privacyInfo5Item3">In connection with a merger, acquisition, financing, or sale of assets.</li>
+      </ul>
+
+      <h2 data-i18n="privacyInfo6Title">Data Retention</h2>
+      <p data-i18n="privacyInfo6Para">
+        We retain information for as long as reasonably necessary to operate the game, provide support, process
+        purchases, comply with legal obligations, resolve disputes, and enforce our agreements.
       </p>
 
-      <h2 data-i18n="privacyInfo5Title">Children's privacy</h2>
-      <p data-i18n="privacyInfo5Para">
-        Our games are not directed to children under 13. If you believe a child has provided personal information,
-        please contact us and we will take appropriate steps.
+      <h2 data-i18n="privacyInfo7Title">Your Choices and Rights</h2>
+      <p data-i18n="privacyInfo7Para">
+        Depending on your location, you may have rights to request access, correction, deletion, or restriction of
+        certain personal information. You may also limit certain data collection through your device settings,
+        advertising settings, or in-app privacy settings where available. To submit a privacy request or ask
+        questions about this policy, contact us at <a href="mailto:hello@playonstudios.co">hello@playonstudios.co</a>.
+      </p>
+
+      <h2 data-i18n="privacyInfo8Title">Children's Privacy</h2>
+      <p data-i18n="privacyInfo8Para">
+        Our games are not directed to children under 13, or under a higher minimum age where required by local law.
+        If you believe a child has provided personal information, please contact us and we will take appropriate
+        steps.
+      </p>
+
+      <h2 data-i18n="privacyInfo9Title">Changes to This Policy</h2>
+      <p data-i18n="privacyInfo9Para">
+        We may update this Privacy Policy from time to time. Any updates will be posted at
+        <a href="https://playonstudios.co/privacy" rel="noopener noreferrer">https://playonstudios.co/privacy</a>
+        and the "Last updated" date will be revised.
       </p>
 
       <h2 data-i18n="privacyContactTitle">Contact</h2>
       <p data-i18n="privacyContactPara">
-        If you have questions about this policy, contact us at:
-        <a href="mailto:hello@playonstudios.co">hello@playonstudios.co</a>
+        Play On Studios<br />
+        <a href="mailto:hello@playonstudios.co">hello@playonstudios.co</a><br />
+        <a href="https://playonstudios.co" rel="noopener noreferrer">https://playonstudios.co</a>
       </p>
 
       <p><a href="/index.html" data-i18n="backToHome">← Back to home</a></p>
@@ -100,16 +157,6 @@
   </div>
 
   <script src="/translations.js"></script>
-  <script src="/translations-extended.js"></script>
-  <script>
-    document.getElementById("d").textContent = new Date().toISOString().slice(0,10);
-    
-    // Initialize language system after DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initLanguage);
-    } else {
-      initLanguage();
-    }
-  </script>
+  <script src="/privacy-translations.js"></script>
 </body>
 </html>
