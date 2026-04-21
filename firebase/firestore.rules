@@ -1,0 +1,95 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===== Helpers =====
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email.lower() == "endergametest@gmail.com";
+    }
+
+    function isGamePayload() {
+      return request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.slug is string
+        && request.resource.data.slug.size() > 0
+        && request.resource.data.status is string
+        && request.resource.data.platforms is list;
+    }
+
+    function isMetricPayload() {
+      return request.resource.data.gameId is string
+        && request.resource.data.gameName is string
+        && request.resource.data.platform is string
+        && request.resource.data.date is string;
+    }
+
+    // installCountry must be write-once. If an existing doc already has a non-empty
+    // installCountry value, subsequent writes may not change it (ignore-if-absent is fine).
+    function installCountryImmutable() {
+      return !("installCountry" in request.resource.data)
+        || !("installCountry" in resource.data)
+        || resource.data.installCountry == null
+        || resource.data.installCountry == ""
+        || resource.data.installCountry == request.resource.data.installCountry;
+    }
+
+    // Allowed fields on a user doc — reject anything else to avoid garbage writes.
+    function userHasAllowedFieldsOnly() {
+      return request.resource.data.keys().hasOnly([
+        "level", "hintCount", "shuffleCount", "undoCount",
+        "toolsUnlockedCount", "schemaVersion", "lastSeenPlatform",
+        "country", "countryCode", "lastSeenCountry",
+        "installCountry", "downloadCountry", "storeCountry",
+        "createdAt", "updatedAt", "firstSeenAt", "installDate",
+        "email"
+      ]);
+    }
+
+    // ===== /users/{userId} =====
+    // - Each user writes only their own doc.
+    // - Reads: the user themselves OR the admin.
+    // - installCountry is write-once; generic country fields stay mutable.
+    match /users/{userId} {
+      allow read: if request.auth != null
+        && (request.auth.uid == userId || isAdmin());
+
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && userHasAllowedFieldsOnly();
+
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && userHasAllowedFieldsOnly()
+        && installCountryImmutable();
+
+      // Users cannot delete their own doc; only the admin can, as a safety valve.
+      allow delete: if isAdmin();
+    }
+
+    // ===== /studioGames/{gameId} =====
+    match /studioGames/{gameId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && isGamePayload();
+      allow delete: if isAdmin();
+    }
+
+    // ===== /studioDailyMetrics/{entryId} =====
+    match /studioDailyMetrics/{entryId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && isMetricPayload();
+      allow delete: if isAdmin();
+    }
+
+    // ===== Default deny on anything else =====
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
