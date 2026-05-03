@@ -1127,6 +1127,36 @@ h1, h2, h3 {
   font-weight: 600;
 }
 
+.copy-id-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.copy-id-button code {
+  transition: color 160ms ease;
+}
+
+.copy-id-button:hover code,
+.copy-id-button:focus-visible code {
+  color: var(--gold-soft);
+}
+
+.copy-id-button:focus-visible {
+  outline: 2px solid rgba(231, 201, 138, 0.45);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+.copy-id-button.is-copied code {
+  color: var(--green);
+}
+
 /* ==== Retention matrix ==== */
 .retention-table td.num {
   padding: 10px 12px;

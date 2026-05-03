@@ -165,6 +165,9 @@ function wireEvents() {
       renderTopPlayersTable();
     });
   });
+  if (els.topPlayersTableBody) {
+    els.topPlayersTableBody.addEventListener("click", handleTopPlayersTableClick);
+  }
   document.querySelectorAll("#levelFunnelChips .chip").forEach((btn) => {
     btn.addEventListener("click", () => {
       setActiveChip("#levelFunnelChips", btn);
@@ -884,13 +887,23 @@ function renderTopPlayersTable() {
   }).slice(0, 30);
 
   if (!sorted.length) {
-    els.topPlayersTableBody.innerHTML = `<tr><td colspan="11" class="table-empty">No players match this filter.</td></tr>`;
+    els.topPlayersTableBody.innerHTML = `<tr><td colspan="12" class="table-empty">No players match this filter.</td></tr>`;
     return;
   }
 
   els.topPlayersTableBody.innerHTML = sorted.map((u) => `
     <tr>
-      <td><code>${escapeHtml(truncateId(u.id))}</code></td>
+      <td>
+        <button
+          type="button"
+          class="copy-id-button"
+          data-copy-user-id="${escapeHtml(u.id)}"
+          title="Copy full user ID"
+          aria-label="Copy full user ID ${escapeHtml(truncateId(u.id))}"
+        >
+          <code>${escapeHtml(truncateId(u.id))}</code>
+        </button>
+      </td>
       <td><span class="segment-pill ${u.segment}">${segmentLabel(u.segment)}</span></td>
       <td><span class="platform-pill ${u.lastSeenPlatform}">${platformLabel(u.lastSeenPlatform)}</span></td>
       <td><span class="country-cell" title="${escapeHtml(countryLabel(u.country))}">${countryFlag(u.country)} <strong>${escapeHtml(countryLabel(u.country))}</strong></span></td>
@@ -901,8 +914,27 @@ function renderTopPlayersTable() {
       <td class="num">${formatNumber(u.toolsUnlockedCount)}</td>
       <td class="num">${formatNumber(u.engagementScore)}</td>
       <td>${formatDateTime(u.updatedAt)}</td>
+      <td>${formatDate(u.createdAt)}</td>
     </tr>
   `).join("");
+}
+
+async function handleTopPlayersTableClick(event) {
+  const button = event.target.closest("[data-copy-user-id]");
+  if (!button) return;
+
+  const userId = button.dataset.copyUserId;
+  if (!userId) return;
+
+  const copied = await copyText(userId);
+  const originalTitle = button.title || "Copy full user ID";
+  button.classList.toggle("is-copied", copied);
+  button.title = copied ? "Copied" : "Copy failed";
+
+  window.setTimeout(() => {
+    button.classList.remove("is-copied");
+    button.title = originalTitle;
+  }, 1200);
 }
 
 // ---- Levels tab ----
@@ -1911,6 +1943,14 @@ function formatDateTime(date) {
   }).format(date);
 }
 
+function formatDate(date) {
+  if (!date || Number.isNaN(date.getTime())) return "Unknown";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeZone: config.dashboard.timezone || "UTC"
+  }).format(date);
+}
+
 function formatShortDate(iso) {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
@@ -1975,4 +2015,34 @@ function escapeHtml(v) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+async function copyText(value) {
+  if (!value) return false;
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      // Fall through to the legacy copy path.
+    }
+  }
+
+  const input = document.createElement("textarea");
+  input.value = value;
+  input.setAttribute("readonly", "");
+  input.style.position = "absolute";
+  input.style.left = "-9999px";
+  document.body.appendChild(input);
+  input.select();
+
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+
+  document.body.removeChild(input);
+  return copied;
 }
