@@ -147,3 +147,5 @@ video.unrulymedia.com, 389957698, RESELLER
 video.unrulymedia.com, 657436911, RESELLER
 video.unrulymedia.com, 144138083, RESELLER
 vungle.com, 69e008b1af129483b2f50d0f, DIRECT, c107d686becd2d77
+rubiconproject.com, 17062, RESELLER, 0bfd66d529a55807
+triplelift.com, 95054, RESELLER, 6c33edb13117fd86
