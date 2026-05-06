@@ -108,7 +108,7 @@ function cacheEls() {
     "kpiAvgLevel", "kpiAvgLevelDelta",
     "kpiEngagement", "kpiEngagementDelta",
     "kpiRevenue", "kpiRevenueDelta",
-    "summaryTableBody", "pulseList", "platformLegend", "topCountriesBody", "countryEmptyNote",
+    "summaryTableBody", "pulseList", "platformLegend", "trendTitle", "topCountriesBody", "countryEmptyNote",
     // Users
     "retentionBody", "retentionNote",
     "segWhales", "segWhalesBar",
@@ -598,6 +598,10 @@ function getPreviousActiveUsers() {
 
 function getInstalledUsers(bounds = getRangeBounds()) {
   return getScopedUsers().filter((u) => isDateInRange(u.createdAt, bounds));
+}
+
+function getDownloadUsers(bounds = getRangeBounds()) {
+  return getUsersForPlatform().filter((u) => isDateInRange(u.createdAt, bounds));
 }
 
 function getMetricsInRange(bounds) {
@@ -1191,12 +1195,14 @@ function renderTrendChart() {
     const byDay = groupSum(metrics, (m) => toIsoDate(m.date), (m) => m.revenue || (m.adRevenue + m.iapRevenue));
     data = days.map((d) => byDay.get(d) || 0);
     label = "Revenue";
+    setText(els.trendTitle, "Daily revenue");
     color = PALETTE.green;
     fillColor = "rgba(142, 214, 175, 0.18)";
   } else if (state.trendMode === "downloads") {
-    const byDay = groupSum(getInstalledUsers(bounds), (u) => toIsoDate(u.createdAt), () => 1);
+    const byDay = groupSum(getDownloadUsers(bounds), (u) => toIsoDate(u.createdAt), () => 1);
     data = days.map((d) => byDay.get(d) || 0);
     label = "Downloads";
+    setText(els.trendTitle, "Daily downloads");
     color = PALETTE.blue;
     fillColor = "rgba(125, 176, 230, 0.2)";
   } else {
@@ -1207,6 +1213,7 @@ function renderTrendChart() {
     });
     data = days.map((d) => dayMap.get(d) || 0);
     label = "Active players";
+    setText(els.trendTitle, "Daily active players");
     color = PALETTE.gold;
     fillColor = "rgba(231, 201, 138, 0.22)";
   }
@@ -1880,6 +1887,10 @@ function setFeedback(element, message, tone) {
   element.classList.remove("is-error", "is-success");
   if (tone === "error") element.classList.add("is-error");
   if (tone === "success") element.classList.add("is-success");
+}
+
+function setText(element, value) {
+  if (element) element.textContent = value;
 }
 
 function handleDashboardError(error) {
