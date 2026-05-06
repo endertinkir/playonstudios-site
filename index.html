@@ -49,13 +49,14 @@
       padding: 14px 0;
     }
     .brand{
-      display:flex; align-items:center; gap:10px;
-      font-weight: 700; letter-spacing:.2px;
+      display:inline-flex; align-items:center;
+      line-height: 0;
     }
     .logo{
-      width: 34px; height: 34px; border-radius: 10px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      box-shadow: 0 10px 24px rgba(124,92,255,.25);
+      display: block;
+      width: clamp(142px, 15vw, 190px);
+      height: auto;
+      filter: drop-shadow(0 10px 18px rgba(0,0,0,.28));
     }
     .navlinks{ display:flex; gap: 18px; color: var(--muted); font-weight: 600; }
     .navlinks a{ padding: 10px 10px; border-radius: 12px; }
@@ -244,10 +245,9 @@
 <body>
   <div class="wrap">
     <div class="nav">
-      <div class="brand">
-        <div class="logo" aria-hidden="true"></div>
-        <div>PLAY ON STUDIOS</div>
-      </div>
+      <a class="brand" href="/index.html" aria-label="Play On Studios home">
+        <img class="logo" src="/assets/play-on-logo-transparent.png" alt="Play On Studios" />
+      </a>
     </div>
 
     <section class="hero">
