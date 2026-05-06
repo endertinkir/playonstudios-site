@@ -416,7 +416,6 @@ function normalizeUser(id, payload = {}) {
   const hintCount = readNumber(payload.hintCount);
   const shuffleCount = readNumber(payload.shuffleCount);
   const undoCount = readNumber(payload.undoCount);
-  const toolsUnlockedCount = readNumber(payload.toolsUnlockedCount);
   const powerUses = hintCount + shuffleCount + undoCount;
 
   const verifiedRaw =
@@ -447,7 +446,6 @@ function normalizeUser(id, payload = {}) {
     hintCount,
     shuffleCount,
     undoCount,
-    toolsUnlockedCount,
     schemaVersion: readNumber(payload.schemaVersion),
     lastSeenPlatform: normalizePlatform(payload.lastSeenPlatform),
     country,
@@ -455,7 +453,7 @@ function normalizeUser(id, payload = {}) {
     updatedAt: parseDate(payload.updatedAt),
     createdAt: parseDate(payload.createdAt) || parseDate(payload.firstSeenAt) || parseDate(payload.installDate),
     powerUses,
-    engagementScore: computeEngagement(level, powerUses, toolsUnlockedCount),
+    engagementScore: computeEngagement(level, powerUses),
     segment: computeSegment(level, powerUses)
   };
 }
@@ -488,9 +486,8 @@ function normalizeMetric(id, payload = {}) {
   };
 }
 
-function computeEngagement(level, powerUses, toolsUnlocked) {
-  // Weighted score: level dominant, power uses and tools as proxies for depth
-  return Math.round((level * 2.5) + (powerUses * 0.6) + (toolsUnlocked * 4));
+function computeEngagement(level, powerUses) {
+  return Math.round((level * 2.5) + (powerUses * 0.6));
 }
 
 function computeSegment(level, powerUses) {
@@ -587,16 +584,20 @@ function applySegmentFilter(users) {
   return users.filter((u) => u.segment === seg);
 }
 
-function getActiveUsers() {
-  const scoped = applySegmentFilter(getUsersForPlatform());
-  const bounds = getRangeBounds();
-  return scoped.filter((u) => isDateInRange(u.updatedAt, bounds));
+function getScopedUsers() {
+  return applySegmentFilter(getUsersForPlatform());
+}
+
+function getActiveUsers(bounds = getRangeBounds()) {
+  return getScopedUsers().filter((u) => isDateInRange(u.updatedAt, bounds));
 }
 
 function getPreviousActiveUsers() {
-  const scoped = applySegmentFilter(getUsersForPlatform());
-  const bounds = getPreviousRangeBounds();
-  return scoped.filter((u) => isDateInRange(u.updatedAt, bounds));
+  return getActiveUsers(getPreviousRangeBounds());
+}
+
+function getInstalledUsers(bounds = getRangeBounds()) {
+  return getScopedUsers().filter((u) => isDateInRange(u.createdAt, bounds));
 }
 
 function getMetricsInRange(bounds) {
@@ -627,7 +628,7 @@ function getMetricCountryCoverage(bounds) {
 function renderDashboard() {
   const active = getActiveUsers();
   const prevActive = getPreviousActiveUsers();
-  const scoped = applySegmentFilter(getUsersForPlatform());
+  const scoped = getScopedUsers();
 
   renderOverview(active, prevActive, scoped);
   renderUsersTab(active, scoped);
@@ -816,7 +817,6 @@ function renderUsersTab(active, scoped) {
   setSeg(els.segChurn, els.segChurnBar, segs.churn);
 
   renderPowerChart(active);
-  renderToolsChart(active);
   renderRecencyChart(scoped);
   renderRetentionMatrix(scoped);
   renderTopPlayersTable();
@@ -824,7 +824,7 @@ function renderUsersTab(active, scoped) {
 
 function renderRetentionMatrix(users) {
   if (!els.retentionBody) return;
-  const matrix = buildCohortMatrix(users, 8);
+  const matrix = buildCohortMatrix(users, getRangeBounds());
   const haveCreatedAtRatio = matrix.totalUsers > 0 ? matrix.withCreatedAt / matrix.totalUsers : 0;
 
   if (els.retentionNote) {
@@ -833,7 +833,7 @@ function renderRetentionMatrix(users) {
       els.retentionNote.hidden = false;
     } else {
       const notes = [
-        "Uses install date and the latest updatedAt timestamp only. Cells show the share of each cohort still seen on or after D1 / D3 / D7 / D14 / D30 — rolling retention, not exact same-day retention."
+        "Uses the selected install-date window and the latest updatedAt timestamp only. Cells show the share of each cohort still seen on or after D1 / D3 / D7 / D14 / D30 — rolling retention, not exact same-day retention."
       ];
       if (haveCreatedAtRatio < 0.6) {
         notes.push(`Only ${Math.round(haveCreatedAtRatio * 100)}% of profiles carry an install date, so these cohorts are based on that subset.`);
@@ -845,7 +845,7 @@ function renderRetentionMatrix(users) {
 
   const nonEmpty = matrix.rows.filter((r) => r.size > 0);
   if (!nonEmpty.length) {
-    els.retentionBody.innerHTML = `<tr><td colspan="7" class="table-empty">No install cohorts found for the last 8 weeks.</td></tr>`;
+    els.retentionBody.innerHTML = `<tr><td colspan="7" class="table-empty">No install cohorts found for this filter window.</td></tr>`;
     return;
   }
 
@@ -879,7 +879,7 @@ function retentionCell(metric) {
 }
 
 function renderTopPlayersTable() {
-  const users = getActiveUsers();
+  const users = getInstalledUsers();
   const sorted = [...users].sort((a, b) => {
     if (state.topMode === "level") return b.level - a.level;
     if (state.topMode === "powers") return b.powerUses - a.powerUses;
@@ -887,7 +887,7 @@ function renderTopPlayersTable() {
   }).slice(0, 30);
 
   if (!sorted.length) {
-    els.topPlayersTableBody.innerHTML = `<tr><td colspan="12" class="table-empty">No players match this filter.</td></tr>`;
+    els.topPlayersTableBody.innerHTML = `<tr><td colspan="11" class="table-empty">No players match this install-date filter.</td></tr>`;
     return;
   }
 
@@ -911,7 +911,6 @@ function renderTopPlayersTable() {
       <td class="num">${formatNumber(u.hintCount)}</td>
       <td class="num">${formatNumber(u.shuffleCount)}</td>
       <td class="num">${formatNumber(u.undoCount)}</td>
-      <td class="num">${formatNumber(u.toolsUnlockedCount)}</td>
       <td class="num">${formatNumber(u.engagementScore)}</td>
       <td>${formatDateTime(u.updatedAt)}</td>
       <td>${formatDate(u.createdAt)}</td>
@@ -959,8 +958,7 @@ function buildLevelRows(users) {
     return {
       label: bucket.label,
       count: members.length,
-      avgPowers: average(members.map((u) => u.powerUses)),
-      avgTools: average(members.map((u) => u.toolsUnlockedCount))
+      avgPowers: average(members.map((u) => u.powerUses))
     };
   });
 }
@@ -1027,7 +1025,7 @@ function renderDetailedProgressionFunnel(active) {
 function renderLevelCohortTable(levelRows, active) {
   const total = active.length || 1;
   if (!levelRows.some((r) => r.count > 0)) {
-    els.levelCohortBody.innerHTML = `<tr><td colspan="5" class="table-empty">No active players in this window.</td></tr>`;
+    els.levelCohortBody.innerHTML = `<tr><td colspan="4" class="table-empty">No active players in this window.</td></tr>`;
     return;
   }
   els.levelCohortBody.innerHTML = levelRows.map((row) => `
@@ -1036,7 +1034,6 @@ function renderLevelCohortTable(levelRows, active) {
       <td class="num">${formatNumber(row.count)}</td>
       <td class="num">${((row.count / total) * 100).toFixed(1)}%</td>
       <td class="num">${formatDecimal(row.avgPowers)}</td>
-      <td class="num">${formatDecimal(row.avgTools)}</td>
     </tr>
   `).join("");
 }
@@ -1197,7 +1194,7 @@ function renderTrendChart() {
     color = PALETTE.green;
     fillColor = "rgba(142, 214, 175, 0.18)";
   } else if (state.trendMode === "downloads") {
-    const byDay = groupSum(metrics, (m) => toIsoDate(m.date), (m) => m.downloads);
+    const byDay = groupSum(getInstalledUsers(bounds), (u) => toIsoDate(u.createdAt), () => 1);
     data = days.map((d) => byDay.get(d) || 0);
     label = "Downloads";
     color = PALETTE.blue;
@@ -1306,30 +1303,6 @@ function renderPowerChart(users) {
   });
 }
 
-function renderToolsChart(users) {
-  if (!window.Chart) return;
-  const buckets = [0, 1, 2, 3, 4, 5, 6, 7, 8];
-  const counts = buckets.map((b) => users.filter((u) => u.toolsUnlockedCount === b).length);
-  const overflow = users.filter((u) => u.toolsUnlockedCount > 8).length;
-  if (overflow) { buckets.push("9+"); counts.push(overflow); }
-
-  upsertChart("toolsChart", {
-    type: "bar",
-    data: {
-      labels: buckets.map(String),
-      datasets: [{
-        label: "Players",
-        data: counts,
-        backgroundColor: gradientBars("toolsChart", PALETTE.violet, "rgba(180, 156, 255, 0.3)"),
-        borderRadius: 8,
-        borderSkipped: false,
-        maxBarThickness: 34
-      }]
-    },
-    options: barChartOptions()
-  });
-}
-
 function renderRecencyChart(users) {
   if (!window.Chart) return;
   const now = Date.now();
@@ -1383,30 +1356,15 @@ function renderPowerPerLevelChart(rows) {
     type: "bar",
     data: {
       labels: rows.map((r) => r.label),
-      datasets: [
-        {
-          label: "Avg power uses",
-          data: rows.map((r) => Number(r.avgPowers.toFixed(1))),
-          backgroundColor: "rgba(231, 201, 138, 0.8)",
-          borderRadius: 8,
-          maxBarThickness: 36
-        },
-        {
-          label: "Avg tools unlocked",
-          data: rows.map((r) => Number(r.avgTools.toFixed(1))),
-          backgroundColor: "rgba(180, 156, 255, 0.8)",
-          borderRadius: 8,
-          maxBarThickness: 36
-        }
-      ]
+      datasets: [{
+        label: "Avg power uses",
+        data: rows.map((r) => Number(r.avgPowers.toFixed(1))),
+        backgroundColor: "rgba(231, 201, 138, 0.8)",
+        borderRadius: 8,
+        maxBarThickness: 36
+      }]
     },
-    options: {
-      ...barChartOptions(),
-      plugins: {
-        ...barChartOptions().plugins,
-        legend: { display: true, position: "bottom", labels: { color: PALETTE.text, padding: 14, usePointStyle: true } }
-      }
-    }
+    options: barChartOptions()
   });
 }
 
@@ -1645,17 +1603,15 @@ function gradientBars(canvasId, top, bottom) {
 }
 
 // ====== Misc helpers ======
-function buildCohortMatrix(users, weeksBack = 8) {
+function buildCohortMatrix(users, bounds) {
   const now = new Date();
   now.setHours(23, 59, 59, 999);
+  const rangeStart = startOfDay(bounds.start);
+  const rangeEnd = endOfDay(bounds.end);
+  const firstWeekStart = startOfWeek(rangeStart);
   const weeks = [];
-  for (let i = weeksBack - 1; i >= 0; i--) {
-    const end = new Date(now);
-    end.setDate(end.getDate() - i * 7);
-    end.setHours(23, 59, 59, 999);
-    const start = new Date(end);
-    start.setDate(start.getDate() - 6);
-    start.setHours(0, 0, 0, 0);
+  for (let start = firstWeekStart; start <= rangeEnd; start = addDays(start, 7)) {
+    const end = endOfDay(addDays(start, 6));
     weeks.push({ start, end });
   }
 
@@ -1663,7 +1619,9 @@ function buildCohortMatrix(users, weeksBack = 8) {
   users.forEach((u) => { if (u.createdAt) withCreatedAt++; });
 
   const rows = weeks.map((week) => {
-    const cohort = users.filter((u) => u.createdAt && u.createdAt >= week.start && u.createdAt <= week.end);
+    const cohortStart = maxDate(week.start, rangeStart);
+    const cohortEnd = minDate(week.end, rangeEnd);
+    const cohort = users.filter((u) => u.createdAt && u.createdAt >= cohortStart && u.createdAt <= cohortEnd);
     const size = cohort.length;
     return {
       label: shortWeekLabel(week.start),
@@ -1679,6 +1637,40 @@ function buildCohortMatrix(users, weeksBack = 8) {
   });
 
   return { rows, withCreatedAt, totalUsers: users.length };
+}
+
+function startOfDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfDay(date) {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function startOfWeek(date) {
+  const d = startOfDay(date);
+  const day = d.getDay();
+  const daysSinceMonday = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - daysSinceMonday);
+  return d;
+}
+
+function maxDate(a, b) {
+  return a > b ? a : b;
+}
+
+function minDate(a, b) {
+  return a < b ? a : b;
 }
 
 function buildCohortMilestone(cohort, days, now) {
@@ -1745,25 +1737,23 @@ function buildPlatformRows(users) {
   const map = new Map();
   users.forEach((u) => {
     const key = u.lastSeenPlatform || "unknown";
-    const entry = map.get(key) || { platform: key, profiles: 0, levelSum: 0, powerSum: 0, toolsSum: 0 };
+    const entry = map.get(key) || { platform: key, profiles: 0, levelSum: 0, powerSum: 0 };
     entry.profiles++;
     entry.levelSum += u.level;
     entry.powerSum += u.powerUses;
-    entry.toolsSum += u.toolsUnlockedCount;
     map.set(key, entry);
   });
   return Array.from(map.values()).map((e) => ({
     platform: e.platform,
     profiles: e.profiles,
     avgLevel: e.profiles ? e.levelSum / e.profiles : 0,
-    avgPowerUses: e.profiles ? e.powerSum / e.profiles : 0,
-    avgToolsUnlocked: e.profiles ? e.toolsSum / e.profiles : 0
+    avgPowerUses: e.profiles ? e.powerSum / e.profiles : 0
   })).sort((a, b) => b.profiles - a.profiles);
 }
 
 function renderPlatformSummaryTable(rows) {
   if (!rows.length) {
-    els.summaryTableBody.innerHTML = `<tr><td colspan="6" class="table-empty">No active profiles in this range yet.</td></tr>`;
+    els.summaryTableBody.innerHTML = `<tr><td colspan="5" class="table-empty">No active profiles in this range yet.</td></tr>`;
     return;
   }
   const total = rows.reduce((a, r) => a + r.profiles, 0) || 1;
@@ -1774,7 +1764,6 @@ function renderPlatformSummaryTable(rows) {
       <td class="num">${((r.profiles / total) * 100).toFixed(1)}%</td>
       <td class="num">${formatDecimal(r.avgLevel)}</td>
       <td class="num">${formatDecimal(r.avgPowerUses)}</td>
-      <td class="num">${formatDecimal(r.avgToolsUnlocked)}</td>
     </tr>
   `).join("");
 }

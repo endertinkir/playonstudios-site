@@ -329,7 +329,6 @@
                       <th class="num">Share</th>
                       <th class="num">Avg Level</th>
                       <th class="num">Avg Powers</th>
-                      <th class="num">Avg Tools</th>
                     </tr>
                   </thead>
                   <tbody id="summaryTableBody"></tbody>
@@ -426,16 +425,6 @@
             <article class="panel chart-panel">
               <div class="panel-head">
                 <div>
-                  <p class="section-kicker">Tools Unlocked</p>
-                  <h2>Unlock distribution</h2>
-                </div>
-              </div>
-              <canvas id="toolsChart" aria-label="Tools unlocked distribution"></canvas>
-            </article>
-
-            <article class="panel chart-panel">
-              <div class="panel-head">
-                <div>
                   <p class="section-kicker">Recency</p>
                   <h2>Last active buckets</h2>
                 </div>
@@ -451,7 +440,7 @@
                   <p class="section-kicker">Cohort Longevity</p>
                   <h2>Install week · seen on or after each milestone</h2>
                 </div>
-                <div class="panel-meta">Last 8 weekly cohorts</div>
+                <div class="panel-meta">Selected install window</div>
               </div>
               <div class="table-wrap">
                 <table class="data-table retention-table">
@@ -478,7 +467,7 @@
               <div class="panel-head">
                 <div>
                   <p class="section-kicker">Top Players</p>
-                  <h2>Highest engagement in window</h2>
+                  <h2>Highest engagement by install date</h2>
                 </div>
                 <div class="chip-group" id="topPlayersChips">
                   <button type="button" class="chip is-active" data-top="engagement">Engagement</button>
@@ -498,7 +487,6 @@
                       <th class="num">Hints</th>
                       <th class="num">Shuffles</th>
                       <th class="num">Undos</th>
-                      <th class="num">Tools</th>
                       <th class="num">Score</th>
                       <th>Last Active</th>
                       <th>Install Date</th>
@@ -596,7 +584,6 @@
                       <th class="num">Players</th>
                       <th class="num">Share</th>
                       <th class="num">Avg Powers</th>
-                      <th class="num">Avg Tools</th>
                     </tr>
                   </thead>
                   <tbody id="levelCohortBody"></tbody>
