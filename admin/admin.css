@@ -1182,6 +1182,16 @@ h1, h2, h3 {
   color: var(--text-subtle);
 }
 
+.retention-table tr.retention-overall td {
+  border-top: 1px solid var(--line-strong);
+  background: rgba(231, 201, 138, 0.045);
+  font-weight: 800;
+}
+
+.retention-table tr.retention-overall td:first-child {
+  color: var(--gold-soft);
+}
+
 /* ==== Misc ==== */
 code {
   padding: 2px 6px;

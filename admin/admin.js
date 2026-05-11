@@ -853,22 +853,27 @@ function renderRetentionMatrix(users) {
     return;
   }
 
-  els.retentionBody.innerHTML = matrix.rows.map((r) => {
-    if (!r.size) {
-      return `<tr class="retention-empty"><td>${escapeHtml(r.label)}</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
-    }
-    return `
-      <tr>
-        <td>${escapeHtml(r.label)}</td>
-        <td class="num">${formatNumber(r.size)}</td>
-        <td class="num">${retentionCell(r.d1)}</td>
-        <td class="num">${retentionCell(r.d3)}</td>
-        <td class="num">${retentionCell(r.d7)}</td>
-        <td class="num">${retentionCell(r.d14)}</td>
-        <td class="num">${retentionCell(r.d30)}</td>
-      </tr>
-    `;
-  }).join("");
+  els.retentionBody.innerHTML = [
+    ...matrix.rows.map(renderRetentionRow),
+    renderRetentionRow(matrix.overall, "retention-overall")
+  ].join("");
+}
+
+function renderRetentionRow(row, className = "") {
+  if (!row.size) {
+    return `<tr class="${className || "retention-empty"}"><td>${escapeHtml(row.label)}</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
+  }
+  return `
+    <tr class="${escapeHtml(className)}">
+      <td>${escapeHtml(row.label)}</td>
+      <td class="num">${formatNumber(row.size)}</td>
+      <td class="num">${retentionCell(row.d1)}</td>
+      <td class="num">${retentionCell(row.d3)}</td>
+      <td class="num">${retentionCell(row.d7)}</td>
+      <td class="num">${retentionCell(row.d14)}</td>
+      <td class="num">${retentionCell(row.d30)}</td>
+    </tr>
+  `;
 }
 
 function retentionCell(metric) {
@@ -1629,21 +1634,28 @@ function buildCohortMatrix(users, bounds) {
     const cohortStart = maxDate(week.start, rangeStart);
     const cohortEnd = minDate(week.end, rangeEnd);
     const cohort = users.filter((u) => u.createdAt && u.createdAt >= cohortStart && u.createdAt <= cohortEnd);
-    const size = cohort.length;
-    return {
-      label: shortWeekLabel(week.start),
-      start: week.start,
-      end: week.end,
-      size,
-      d1: buildCohortMilestone(cohort, 1, now),
-      d3: buildCohortMilestone(cohort, 3, now),
-      d7: buildCohortMilestone(cohort, 7, now),
-      d14: buildCohortMilestone(cohort, 14, now),
-      d30: buildCohortMilestone(cohort, 30, now)
-    };
+    return buildRetentionRow(shortWeekLabel(week.start), cohort, week.start, week.end, now);
   });
 
-  return { rows, withCreatedAt, totalUsers: users.length };
+  const overallCohort = users.filter((u) => u.createdAt && u.createdAt >= rangeStart && u.createdAt <= rangeEnd);
+  const overall = buildRetentionRow("Overall", overallCohort, rangeStart, rangeEnd, now);
+
+  return { rows, overall, withCreatedAt, totalUsers: users.length };
+}
+
+function buildRetentionRow(label, cohort, start, end, now) {
+  const size = cohort.length;
+  return {
+    label,
+    start,
+    end,
+    size,
+    d1: buildCohortMilestone(cohort, 1, now),
+    d3: buildCohortMilestone(cohort, 3, now),
+    d7: buildCohortMilestone(cohort, 7, now),
+    d14: buildCohortMilestone(cohort, 14, now),
+    d30: buildCohortMilestone(cohort, 30, now)
+  };
 }
 
 function startOfDay(date) {
