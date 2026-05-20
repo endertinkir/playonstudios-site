@@ -149,3 +149,9 @@ video.unrulymedia.com, 144138083, RESELLER
 vungle.com, 69e008b1af129483b2f50d0f, DIRECT, c107d686becd2d77
 rubiconproject.com, 17062, RESELLER, 0bfd66d529a55807
 triplelift.com, 95054, RESELLER, 6c33edb13117fd86
+smartadserver.com, 4972, RESELLER, 060d053dcf45cbf3
+onlinemediasolutions.com, 23120, RESELLER, b3868b187e4b6402
+brightcom.com, 23120, RESELLER
+ogury.com, 065d4ff5-a269-44be-9634-9d4d7af2dfc3, RESELLER
+pubmatic.com, 163117, RESELLER, 5d62403b186f2ace
+adform.com, 3400, RESELLER, 9f5210a2f0999e32
