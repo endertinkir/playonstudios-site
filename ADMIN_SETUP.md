@@ -135,6 +135,18 @@ For the `studioDailyMetrics` collection, `downloadCountry` should come from the 
 
 These are the authoritative download-country numbers. Everything else (GA4 install country, Firebase `country` field, MMP-reported country) is a directional proxy — the dashboard labels anything not coming from these fields as "inferred" and shows a trust pill on the panel.
 
+## Active in the last 30 minutes
+
+The Overview tab includes an `Active Last 30m` card and the Cohort filter includes an `Active last 30m` shortcut. Both use `users/{userId}.updatedAt`; no additional collection or Firestore index is required.
+
+For this to represent recent activity accurately, update `updatedAt` with `serverTimestamp()`:
+
+1. When the app enters the foreground or starts a gameplay session.
+2. Roughly every 10 minutes while the player remains active.
+3. Once more when important profile progress is persisted.
+
+Do not write on every interaction. A periodic heartbeat keeps the metric useful without creating excessive Firestore writes. The admin dashboard reads a snapshot, so use the `Refresh` button to pull newly written activity.
+
 ## Admin login hardening
 
 The admin panel uses a Firebase Web SDK. Firebase Web API keys are not secrets — they only identify the project. Real protection comes from the seven layers below. Enable as many as possible.

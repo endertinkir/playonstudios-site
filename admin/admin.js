@@ -33,6 +33,8 @@ const FUNNEL_STAGES = [
   { label: "Expert",   minLevel: 100 }
 ];
 
+const ACTIVE_30M_WINDOW_MS = 30 * 60 * 1000;
+
 const RECENCY_BUCKETS = [
   { label: "Today",     maxDays: 1   },
   { label: "2–7 days",  maxDays: 7   },
@@ -105,6 +107,7 @@ function cacheEls() {
     // Overview KPIs
     "kpiTotalProfiles", "kpiTotalProfilesDelta",
     "kpiActiveProfiles", "kpiActiveProfilesDelta",
+    "kpiActive30m", "kpiActive30mDelta",
     "kpiAvgLevel", "kpiAvgLevelDelta",
     "kpiEngagement", "kpiEngagementDelta",
     "kpiRevenue", "kpiRevenueDelta",
@@ -571,21 +574,23 @@ function getUsersForPlatform() {
   });
 }
 
-function applySegmentFilter(users) {
+function applySegmentFilter(users, referenceTime = Date.now()) {
   const seg = els.segmentFilter.value;
   if (seg === "all") return users;
-  const now = Date.now();
+  if (seg === "active30m") {
+    return getUsersActiveBetween(users, referenceTime - ACTIVE_30M_WINDOW_MS, referenceTime);
+  }
   if (seg === "active7") {
-    return users.filter((u) => u.updatedAt && (now - u.updatedAt.getTime()) <= 7 * 864e5);
+    return users.filter((u) => u.updatedAt && (referenceTime - u.updatedAt.getTime()) <= 7 * 864e5);
   }
   if (seg === "churnrisk") {
-    return users.filter((u) => !u.updatedAt || (now - u.updatedAt.getTime()) > 14 * 864e5);
+    return users.filter((u) => !u.updatedAt || (referenceTime - u.updatedAt.getTime()) > 14 * 864e5);
   }
   return users.filter((u) => u.segment === seg);
 }
 
-function getScopedUsers() {
-  return applySegmentFilter(getUsersForPlatform());
+function getScopedUsers(referenceTime = Date.now()) {
+  return applySegmentFilter(getUsersForPlatform(), referenceTime);
 }
 
 function getActiveUsers(bounds = getRangeBounds()) {
@@ -602,6 +607,14 @@ function getInstalledUsers(bounds = getRangeBounds()) {
 
 function getDownloadUsers(bounds = getRangeBounds()) {
   return getUsersForPlatform().filter((u) => isDateInRange(u.createdAt, bounds));
+}
+
+function getUsersActiveBetween(users, startTime, endTime) {
+  return users.filter((u) => {
+    if (!u.updatedAt) return false;
+    const updatedAt = u.updatedAt.getTime();
+    return updatedAt > startTime && updatedAt <= endTime;
+  });
 }
 
 function getMetricsInRange(bounds) {
@@ -650,6 +663,10 @@ function renderOverview(active, prevActive, scoped) {
 
   const total = scoped.length;
   const activeCount = active.length;
+  const now = Date.now();
+  const active30mCount = getUsersActiveBetween(scoped, now - ACTIVE_30M_WINDOW_MS, now).length;
+  const prev30mScoped = getScopedUsers(now - ACTIVE_30M_WINDOW_MS);
+  const prevActive30mCount = getUsersActiveBetween(prev30mScoped, now - (2 * ACTIVE_30M_WINDOW_MS), now - ACTIVE_30M_WINDOW_MS).length;
   const avgLevel = average(active.map((u) => u.level));
   const avgEng = average(active.map((u) => u.engagementScore));
   const revenue = sum(metricsCurrent.map((m) => m.revenue || (m.adRevenue + m.iapRevenue)));
@@ -662,6 +679,7 @@ function renderOverview(active, prevActive, scoped) {
 
   setKpi(els.kpiTotalProfiles, els.kpiTotalProfilesDelta, total, prevTotal, "count");
   setKpi(els.kpiActiveProfiles, els.kpiActiveProfilesDelta, activeCount, prevActiveCount, "count");
+  setKpi(els.kpiActive30m, els.kpiActive30mDelta, active30mCount, prevActive30mCount, "count");
   setKpi(els.kpiAvgLevel, els.kpiAvgLevelDelta, avgLevel, prevAvgLevel, "decimal");
   setKpi(els.kpiEngagement, els.kpiEngagementDelta, avgEng, prevAvgEng, "count");
   setKpi(els.kpiRevenue, els.kpiRevenueDelta, revenue, prevRevenue, "currency");

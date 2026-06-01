@@ -50,7 +50,7 @@
     referrerpolicy="no-referrer"
     defer
   ></script>
-  <script type="module" src="/admin/admin.js?v=20260511-retention-overall"></script>
+  <script type="module" src="/admin/admin.js?v=20260601-active-30m"></script>
 </head>
 <body class="page-admin">
   <div class="aurora" aria-hidden="true">
@@ -172,6 +172,7 @@
                 <option value="pro">Pro (L20–49)</option>
                 <option value="casual">Casual (L5–19)</option>
                 <option value="beginner">Beginner (L0–4)</option>
+                <option value="active30m">Active last 30m</option>
                 <option value="active7">Active last 7d</option>
                 <option value="churnrisk">Churn risk (&gt;14d idle)</option>
               </select>
@@ -215,7 +216,7 @@
 
         <!-- ==================== OVERVIEW TAB ==================== -->
         <section class="tab-pane is-active" data-pane="overview" role="tabpanel">
-          <section class="kpi-strip">
+          <section class="kpi-strip kpi-strip-6">
             <article class="panel kpi-card kpi-tone-gold">
               <div class="kpi-head">
                 <span class="kpi-icon" aria-hidden="true">
@@ -241,6 +242,20 @@
               <div class="kpi-foot">
                 <span class="kpi-delta" id="kpiActiveProfilesDelta">—</span>
                 <span class="kpi-caption">Updated within selected window</span>
+              </div>
+            </article>
+
+            <article class="panel kpi-card kpi-tone-teal">
+              <div class="kpi-head">
+                <span class="kpi-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                </span>
+                <span class="kpi-label">Active Last 30m</span>
+              </div>
+              <strong class="kpi-value" id="kpiActive30m">0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-delta" id="kpiActive30mDelta">—</span>
+                <span class="kpi-caption">Compared with previous 30m</span>
               </div>
             </article>
 
