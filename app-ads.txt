@@ -492,3 +492,5 @@ media.net, 8cu9b72o6, RESELLER
 sharethrough.com, bc6d1whs, RESELLER, d53b998a7bd4ecd2
 video.unrulymedia.com, 703273072, RESELLER
 media.net, 8CU675N41, RESELLER
+themediagrid.com, FALINO, RESELLER, 9fac4a4a87c2a44f
+e-planning.net, 6a7f877127485fdb, RESELLER, c1ba615865ed87b2
