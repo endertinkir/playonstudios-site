@@ -50,7 +50,7 @@
     referrerpolicy="no-referrer"
     defer
   ></script>
-  <script type="module" src="/admin/admin.js?v=20260601-active-30m"></script>
+  <script type="module" src="/admin/admin.js?v=20260605-ad-metrics"></script>
 </head>
 <body class="page-admin">
   <div class="aurora" aria-hidden="true">
@@ -161,6 +161,13 @@
                 <option value="all">All platforms</option>
                 <option value="ios">iOS</option>
                 <option value="android">Android</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Build</span>
+              <select id="buildFilter">
+                <option value="all">All builds</option>
               </select>
             </label>
 
@@ -299,6 +306,96 @@
                 <span class="kpi-delta" id="kpiRevenueDelta">—</span>
                 <span class="kpi-caption">Ad + IAP in window</span>
               </div>
+            </article>
+          </section>
+
+          <section class="kpi-strip ad-kpi-strip">
+            <article class="panel kpi-card kpi-tone-green">
+              <div class="kpi-head">
+                <span class="kpi-label">Estimated Ad Revenue</span>
+              </div>
+              <strong class="kpi-value" id="adTotalRevenue">$0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-caption">RevenueMicros ÷ 1,000,000</span>
+              </div>
+            </article>
+
+            <article class="panel kpi-card kpi-tone-gold">
+              <div class="kpi-head">
+                <span class="kpi-label">Paid Impressions</span>
+              </div>
+              <strong class="kpi-value" id="adPaidImpressions">0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-caption">AdMob paid impression events</span>
+              </div>
+            </article>
+
+            <article class="panel kpi-card kpi-tone-blue">
+              <div class="kpi-head">
+                <span class="kpi-label">Interstitial Watches</span>
+              </div>
+              <strong class="kpi-value" id="adInterstitialWatches">0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-caption">Shown and normally closed</span>
+              </div>
+            </article>
+
+            <article class="panel kpi-card kpi-tone-violet">
+              <div class="kpi-head">
+                <span class="kpi-label">Rewarded Completed</span>
+              </div>
+              <strong class="kpi-value" id="adRewardedCompleted">0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-caption">Reward earned events</span>
+              </div>
+            </article>
+
+            <article class="panel kpi-card kpi-tone-rose">
+              <div class="kpi-head">
+                <span class="kpi-label">Ad Interruptions</span>
+              </div>
+              <strong class="kpi-value" id="adInterruptions">0</strong>
+              <div class="kpi-foot">
+                <span class="kpi-caption">Unfinished ad resumes</span>
+              </div>
+            </article>
+          </section>
+
+          <section class="admin-grid">
+            <article class="panel table-panel chart-span-2">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">User Ad Monetization</p>
+                  <h2>Interstitial vs rewarded counters</h2>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Format</th>
+                      <th class="num">Revenue</th>
+                      <th class="num">Paid Impr.</th>
+                      <th class="num">Completed</th>
+                      <th class="num">Avg Visible</th>
+                      <th class="num">Friction</th>
+                      <th class="num">Interrupted</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adBreakdownBody"></tbody>
+                </table>
+              </div>
+              <p class="panel-feedback">These are lifetime counters from <code>users</code>, scoped to profiles active in the selected date range and matching the current filters.</p>
+            </article>
+
+            <article class="panel insight-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Ad Health</p>
+                  <h2>Revenue and UX signals</h2>
+                </div>
+              </div>
+              <ul class="ad-health-list" id="adHealthList"></ul>
             </article>
           </section>
 
@@ -491,6 +588,8 @@
                   <button type="button" class="chip is-active" data-top="engagement">Engagement</button>
                   <button type="button" class="chip" data-top="level">Level</button>
                   <button type="button" class="chip" data-top="powers">Powers</button>
+                  <button type="button" class="chip" data-top="adRevenue">Ad Revenue</button>
+                  <button type="button" class="chip" data-top="adExposure">Ads</button>
                 </div>
               </div>
               <div class="table-wrap">
@@ -501,11 +600,16 @@
                       <th>Segment</th>
                       <th>Platform</th>
                       <th>Country</th>
+                      <th class="num">Build</th>
                       <th class="num">Level</th>
                       <th class="num">Hints</th>
                       <th class="num">Shuffles</th>
                       <th class="num">Undos</th>
                       <th class="num">Score</th>
+                      <th class="num">Ad Watches</th>
+                      <th class="num">Paid Impr.</th>
+                      <th class="num">Ad Revenue</th>
+                      <th>Ad Flags</th>
                       <th>Last Active</th>
                       <th>Install Date</th>
                     </tr>

@@ -34,6 +34,7 @@ const FUNNEL_STAGES = [
 ];
 
 const ACTIVE_30M_WINDOW_MS = 30 * 60 * 1000;
+const AD_REVENUE_MICROS_DIVISOR = 1000000;
 
 const RECENCY_BUCKETS = [
   { label: "Today",     maxDays: 1   },
@@ -102,7 +103,7 @@ function cacheEls() {
     "authScreen", "configBanner", "sessionBadge", "sessionBadgeLabel",
     "logoutButton", "loginPanel", "appPanel", "loginForm",
     "loginButton", "loginEmail", "loginPassword", "authFeedback",
-    "rangePreset", "rangeStart", "rangeEnd", "platformFilter", "segmentFilter", "countryFilter",
+    "rangePreset", "rangeStart", "rangeEnd", "platformFilter", "segmentFilter", "countryFilter", "buildFilter",
     "refreshButton", "dataFreshness", "dashboardNotice",
     // Overview KPIs
     "kpiTotalProfiles", "kpiTotalProfilesDelta",
@@ -111,6 +112,8 @@ function cacheEls() {
     "kpiAvgLevel", "kpiAvgLevelDelta",
     "kpiEngagement", "kpiEngagementDelta",
     "kpiRevenue", "kpiRevenueDelta",
+    "adTotalRevenue", "adPaidImpressions", "adInterstitialWatches", "adRewardedCompleted", "adInterruptions",
+    "adBreakdownBody", "adHealthList",
     "summaryTableBody", "pulseList", "platformLegend", "trendTitle", "topCountriesBody", "countryEmptyNote",
     // Users
     "retentionBody", "retentionNote",
@@ -144,6 +147,7 @@ function wireEvents() {
   els.platformFilter.addEventListener("change", renderDashboard);
   els.segmentFilter.addEventListener("change", renderDashboard);
   if (els.countryFilter) els.countryFilter.addEventListener("change", renderDashboard);
+  if (els.buildFilter) els.buildFilter.addEventListener("change", renderDashboard);
   els.refreshButton.addEventListener("click", () => {
     refreshAll().catch(handleDashboardError);
   });
@@ -294,6 +298,7 @@ async function refreshAll() {
   try {
     await Promise.all([loadUsers(), loadGames(), loadMetrics()]);
     populateCountryOptions();
+    populateBuildOptions();
     renderDashboard();
     els.dataFreshness.textContent = `Last synced ${formatDateTime(new Date())}`;
   } finally {
@@ -324,6 +329,29 @@ function populateCountryOptions() {
   }
   els.countryFilter.innerHTML = options.join("");
   els.countryFilter.value = Array.from(counts.keys()).concat(["all"]).includes(previous) ? previous : "all";
+}
+
+function populateBuildOptions() {
+  if (!els.buildFilter) return;
+  const previous = els.buildFilter.value || "all";
+  const counts = new Map();
+  state.users.forEach((u) => {
+    const k = u.buildNumber || "unknown";
+    counts.set(k, (counts.get(k) || 0) + 1);
+  });
+  const entries = Array.from(counts.entries())
+    .sort((a, b) => {
+      if (a[0] === "unknown") return 1;
+      if (b[0] === "unknown") return -1;
+      return Number(b[0]) - Number(a[0]) || String(b[0]).localeCompare(String(a[0]));
+    });
+  els.buildFilter.innerHTML = [
+    `<option value="all">All builds</option>`,
+    ...entries.map(([build, count]) =>
+      `<option value="${escapeHtml(build)}">${build === "unknown" ? "Unknown build" : `Build ${escapeHtml(build)}`} · ${formatNumber(count)}</option>`
+    )
+  ].join("");
+  els.buildFilter.value = Array.from(counts.keys()).concat(["all"]).includes(previous) ? previous : "all";
 }
 
 function renderDashboardNotice() {
@@ -420,6 +448,8 @@ function normalizeUser(id, payload = {}) {
   const shuffleCount = readNumber(payload.shuffleCount);
   const undoCount = readNumber(payload.undoCount);
   const powerUses = hintCount + shuffleCount + undoCount;
+  const buildNumber = normalizeBuildNumber(payload.buildNumber);
+  const ads = normalizeUserAdStats(payload);
 
   const verifiedRaw =
     payload.installCountry ||
@@ -449,6 +479,7 @@ function normalizeUser(id, payload = {}) {
     hintCount,
     shuffleCount,
     undoCount,
+    buildNumber,
     schemaVersion: readNumber(payload.schemaVersion),
     lastSeenPlatform: normalizePlatform(payload.lastSeenPlatform),
     country,
@@ -456,6 +487,7 @@ function normalizeUser(id, payload = {}) {
     updatedAt: parseDate(payload.updatedAt),
     createdAt: parseDate(payload.createdAt) || parseDate(payload.firstSeenAt) || parseDate(payload.installDate),
     powerUses,
+    ads,
     engagementScore: computeEngagement(level, powerUses),
     segment: computeSegment(level, powerUses)
   };
@@ -519,6 +551,60 @@ function normalizeCountry(value) {
   return "unknown";
 }
 
+function normalizeBuildNumber(value) {
+  if (value == null || value === "") return "unknown";
+  return String(value).trim() || "unknown";
+}
+
+function normalizeUserAdStats(payload = {}) {
+  const interstitialWatchCount = readNumber(payload.interstitialAdWatchCount);
+  const rewardedWatchCount = readNumber(payload.rewardedAdWatchCount);
+  const interstitialPaidImpressions = readNumber(payload.interstitialPaidImpressionCount);
+  const rewardedPaidImpressions = readNumber(payload.rewardedPaidImpressionCount);
+  const interstitialRevenue = microsToRevenue(payload.interstitialAdRevenueMicros);
+  const rewardedRevenue = microsToRevenue(payload.rewardedAdRevenueMicros);
+  const interstitialVisibleMs = readNumber(payload.interstitialAdTotalVisibleMs);
+  const rewardedVisibleMs = readNumber(payload.rewardedAdTotalVisibleMs);
+  const interstitialShortCloseCount = readNumber(payload.interstitialAdShortCloseCount);
+  const rewardedNoRewardCloseCount = readNumber(payload.rewardedAdNoRewardCloseCount);
+  const interstitialInterruptedCount = readNumber(payload.interstitialAdInterruptedCount);
+  const rewardedInterruptedCount = readNumber(payload.rewardedAdInterruptedCount);
+
+  const totalWatchCount = interstitialWatchCount + rewardedWatchCount;
+  const totalPaidImpressions = interstitialPaidImpressions + rewardedPaidImpressions;
+  const totalRevenue = interstitialRevenue + rewardedRevenue;
+  const totalInterruptedCount = interstitialInterruptedCount + rewardedInterruptedCount;
+  const rewardedStarts = rewardedWatchCount + rewardedNoRewardCloseCount;
+  const totalAdCompletionsOrCloses = totalWatchCount + rewardedNoRewardCloseCount;
+
+  return {
+    interstitialWatchCount,
+    rewardedWatchCount,
+    interstitialPaidImpressions,
+    rewardedPaidImpressions,
+    interstitialRevenue,
+    rewardedRevenue,
+    interstitialVisibleMs,
+    rewardedVisibleMs,
+    interstitialShortCloseCount,
+    rewardedNoRewardCloseCount,
+    interstitialInterruptedCount,
+    rewardedInterruptedCount,
+    totalWatchCount,
+    totalPaidImpressions,
+    totalRevenue,
+    totalInterruptedCount,
+    avgInterstitialVisibleSeconds: interstitialWatchCount > 0 ? (interstitialVisibleMs / interstitialWatchCount) / 1000 : 0,
+    avgRewardedVisibleSeconds: rewardedStarts > 0 ? (rewardedVisibleMs / rewardedStarts) / 1000 : 0,
+    rewardedNoRewardCloseRate: rewardedStarts > 0 ? rewardedNoRewardCloseCount / rewardedStarts : 0,
+    interruptedRate: totalAdCompletionsOrCloses > 0 ? totalInterruptedCount / totalAdCompletionsOrCloses : 0
+  };
+}
+
+function microsToRevenue(value) {
+  return readNumber(value) / AD_REVENUE_MICROS_DIVISOR;
+}
+
 function countryFlag(code) {
   if (!code || code === "unknown" || code.length !== 2) return "🌍";
   const base = 127397;
@@ -567,9 +653,11 @@ function isDateInRange(d, bounds) {
 function getUsersForPlatform() {
   const p = els.platformFilter.value;
   const c = els.countryFilter ? els.countryFilter.value : "all";
+  const b = els.buildFilter ? els.buildFilter.value : "all";
   return state.users.filter((u) => {
     if (p !== "all" && u.lastSeenPlatform !== p) return false;
     if (c !== "all" && u.country !== c) return false;
+    if (b !== "all" && u.buildNumber !== b) return false;
     return true;
   });
 }
@@ -683,6 +771,7 @@ function renderOverview(active, prevActive, scoped) {
   setKpi(els.kpiAvgLevel, els.kpiAvgLevelDelta, avgLevel, prevAvgLevel, "decimal");
   setKpi(els.kpiEngagement, els.kpiEngagementDelta, avgEng, prevAvgEng, "count");
   setKpi(els.kpiRevenue, els.kpiRevenueDelta, revenue, prevRevenue, "currency");
+  renderAdOverview(active);
 
   const platformRows = buildPlatformRows(active);
   renderPlatformSummaryTable(platformRows);
@@ -717,6 +806,106 @@ function renderTopCountriesTable(users) {
       <td class="num">${((r.profiles / total) * 100).toFixed(1)}%</td>
       <td class="num">${formatDecimal(r.avgLevel)}</td>
     </tr>
+  `).join("");
+}
+
+function renderAdOverview(users) {
+  const summary = buildAdSummary(users);
+  setText(els.adTotalRevenue, formatAdRevenue(summary.totalRevenue));
+  setText(els.adPaidImpressions, formatNumber(summary.totalPaidImpressions));
+  setText(els.adInterstitialWatches, formatNumber(summary.interstitialWatchCount));
+  setText(els.adRewardedCompleted, formatNumber(summary.rewardedWatchCount));
+  setText(els.adInterruptions, formatNumber(summary.totalInterruptedCount));
+  renderAdBreakdownTable(summary);
+  renderAdHealthList(summary);
+}
+
+function renderAdBreakdownTable(summary) {
+  if (!els.adBreakdownBody) return;
+  if (summary.userCount === 0) {
+    els.adBreakdownBody.innerHTML = `<tr><td colspan="7" class="table-empty">No active profiles in this range.</td></tr>`;
+    return;
+  }
+
+  const rows = [
+    {
+      type: "Interstitial",
+      revenue: summary.interstitialRevenue,
+      paidImpressions: summary.interstitialPaidImpressions,
+      completions: summary.interstitialWatchCount,
+      avgVisibleSeconds: summary.avgInterstitialVisibleSeconds,
+      frictionLabel: "Short closes",
+      frictionCount: summary.interstitialShortCloseCount,
+      interruptions: summary.interstitialInterruptedCount
+    },
+    {
+      type: "Rewarded",
+      revenue: summary.rewardedRevenue,
+      paidImpressions: summary.rewardedPaidImpressions,
+      completions: summary.rewardedWatchCount,
+      avgVisibleSeconds: summary.avgRewardedVisibleSeconds,
+      frictionLabel: "No reward closes",
+      frictionCount: summary.rewardedNoRewardCloseCount,
+      interruptions: summary.rewardedInterruptedCount
+    }
+  ];
+
+  els.adBreakdownBody.innerHTML = rows.map((r) => `
+    <tr>
+      <td><strong>${escapeHtml(r.type)}</strong></td>
+      <td class="num">${formatAdRevenue(r.revenue)}</td>
+      <td class="num">${formatNumber(r.paidImpressions)}</td>
+      <td class="num">${formatNumber(r.completions)}</td>
+      <td class="num">${r.avgVisibleSeconds > 0 ? `${formatDecimal(r.avgVisibleSeconds)}s` : "—"}</td>
+      <td class="num" title="${escapeHtml(r.frictionLabel)}">${formatNumber(r.frictionCount)}</td>
+      <td class="num">${formatNumber(r.interruptions)}</td>
+    </tr>
+  `).join("");
+}
+
+function renderAdHealthList(summary) {
+  if (!els.adHealthList) return;
+  const items = [
+    {
+      label: "Estimated eCPM",
+      value: summary.ecpm > 0 ? formatAdRevenue(summary.ecpm) : "—",
+      detail: "Revenue per 1,000 paid impressions",
+      tone: summary.ecpm > 0 ? "is-positive" : "is-warning"
+    },
+    {
+      label: "Revenue / paid impression",
+      value: summary.revenuePerPaidImpression > 0 ? formatAdRevenue(summary.revenuePerPaidImpression) : "—",
+      detail: "Micros revenue divided by paid impression count",
+      tone: summary.revenuePerPaidImpression > 0 ? "is-positive" : "is-warning"
+    },
+    {
+      label: "Reward drop-off",
+      value: summary.rewardedNoRewardCloseRate > 0 ? formatPercent(summary.rewardedNoRewardCloseRate) : "0%",
+      detail: `${formatNumber(summary.rewardedNoRewardCloseCount)} rewarded closes before reward`,
+      tone: summary.rewardedNoRewardCloseRate >= 0.2 ? "is-danger" : summary.rewardedNoRewardCloseRate > 0 ? "is-warning" : "is-positive"
+    },
+    {
+      label: "Ad interruptions",
+      value: summary.interruptedRate > 0 ? formatPercent(summary.interruptedRate) : "0%",
+      detail: `${formatNumber(summary.totalInterruptedCount)} sessions resumed after an unfinished ad`,
+      tone: summary.interruptedRate >= 0.05 ? "is-danger" : summary.interruptedRate > 0 ? "is-warning" : "is-positive"
+    },
+    {
+      label: "Missing paid events",
+      value: formatNumber(summary.paidImpressionMissingUsers),
+      detail: "Users with ad watches but no paid impression event",
+      tone: summary.paidImpressionMissingUsers > 0 ? "is-warning" : "is-positive"
+    }
+  ];
+
+  els.adHealthList.innerHTML = items.map((item) => `
+    <li class="ad-health-item ${item.tone}">
+      <span>
+        <strong>${escapeHtml(item.label)}</strong>
+        <em>${escapeHtml(item.detail)}</em>
+      </span>
+      <b>${escapeHtml(item.value)}</b>
+    </li>
   `).join("");
 }
 
@@ -910,11 +1099,13 @@ function renderTopPlayersTable() {
   const sorted = [...users].sort((a, b) => {
     if (state.topMode === "level") return b.level - a.level;
     if (state.topMode === "powers") return b.powerUses - a.powerUses;
+    if (state.topMode === "adRevenue") return b.ads.totalRevenue - a.ads.totalRevenue;
+    if (state.topMode === "adExposure") return b.ads.totalWatchCount - a.ads.totalWatchCount;
     return b.engagementScore - a.engagementScore;
   }).slice(0, 30);
 
   if (!sorted.length) {
-    els.topPlayersTableBody.innerHTML = `<tr><td colspan="11" class="table-empty">No players match this install-date filter.</td></tr>`;
+    els.topPlayersTableBody.innerHTML = `<tr><td colspan="16" class="table-empty">No players match this install-date filter.</td></tr>`;
     return;
   }
 
@@ -934,15 +1125,34 @@ function renderTopPlayersTable() {
       <td><span class="segment-pill ${u.segment}">${segmentLabel(u.segment)}</span></td>
       <td><span class="platform-pill ${u.lastSeenPlatform}">${platformLabel(u.lastSeenPlatform)}</span></td>
       <td><span class="country-cell" title="${escapeHtml(countryLabel(u.country))}">${countryFlag(u.country)} <strong>${escapeHtml(countryLabel(u.country))}</strong></span></td>
+      <td class="num">${u.buildNumber === "unknown" ? "—" : escapeHtml(u.buildNumber)}</td>
       <td class="num">${formatNumber(u.level)}</td>
       <td class="num">${formatNumber(u.hintCount)}</td>
       <td class="num">${formatNumber(u.shuffleCount)}</td>
       <td class="num">${formatNumber(u.undoCount)}</td>
       <td class="num">${formatNumber(u.engagementScore)}</td>
+      <td class="num">${formatNumber(u.ads.totalWatchCount)}</td>
+      <td class="num">${formatNumber(u.ads.totalPaidImpressions)}</td>
+      <td class="num">${formatAdRevenue(u.ads.totalRevenue)}</td>
+      <td>${renderAdFlags(u)}</td>
       <td>${formatDateTime(u.updatedAt)}</td>
       <td>${formatDate(u.createdAt)}</td>
     </tr>
   `).join("");
+}
+
+function renderAdFlags(user) {
+  const ads = user.ads || normalizeUserAdStats();
+  const flags = [];
+  if (ads.totalRevenue > 0) flags.push({ label: "Revenue", tone: "success", title: "RevenueMicros is above zero" });
+  if (ads.totalWatchCount >= 5) flags.push({ label: "High exposure", tone: "neutral", title: "Five or more completed/closed ad watches" });
+  if (ads.totalWatchCount > 0 && ads.totalPaidImpressions === 0) flags.push({ label: "No paid event", tone: "warning", title: "Ad watch exists but paid impression count is zero" });
+  if (ads.rewardedNoRewardCloseCount > 0) flags.push({ label: "Reward drop-off", tone: "warning", title: "Rewarded ad closed before reward" });
+  if (ads.totalInterruptedCount > 0) flags.push({ label: "Interrupted", tone: "danger", title: "App resumed after an unfinished ad" });
+  if (!flags.length) return `<span class="ad-flag-empty">—</span>`;
+  return `<span class="ad-flag-list">${flags.map((flag) =>
+    `<span class="ad-flag ${flag.tone}" title="${escapeHtml(flag.title)}">${escapeHtml(flag.label)}</span>`
+  ).join("")}</span>`;
 }
 
 async function handleTopPlayersTableClick(event) {
@@ -1788,6 +1998,69 @@ function buildPlatformRows(users) {
   })).sort((a, b) => b.profiles - a.profiles);
 }
 
+function buildAdSummary(users) {
+  const summary = {
+    userCount: users.length,
+    interstitialWatchCount: 0,
+    rewardedWatchCount: 0,
+    interstitialPaidImpressions: 0,
+    rewardedPaidImpressions: 0,
+    interstitialRevenue: 0,
+    rewardedRevenue: 0,
+    interstitialVisibleMs: 0,
+    rewardedVisibleMs: 0,
+    interstitialShortCloseCount: 0,
+    rewardedNoRewardCloseCount: 0,
+    interstitialInterruptedCount: 0,
+    rewardedInterruptedCount: 0,
+    paidImpressionMissingUsers: 0
+  };
+
+  users.forEach((u) => {
+    const ads = u.ads || normalizeUserAdStats();
+    summary.interstitialWatchCount += ads.interstitialWatchCount;
+    summary.rewardedWatchCount += ads.rewardedWatchCount;
+    summary.interstitialPaidImpressions += ads.interstitialPaidImpressions;
+    summary.rewardedPaidImpressions += ads.rewardedPaidImpressions;
+    summary.interstitialRevenue += ads.interstitialRevenue;
+    summary.rewardedRevenue += ads.rewardedRevenue;
+    summary.interstitialVisibleMs += ads.interstitialVisibleMs;
+    summary.rewardedVisibleMs += ads.rewardedVisibleMs;
+    summary.interstitialShortCloseCount += ads.interstitialShortCloseCount;
+    summary.rewardedNoRewardCloseCount += ads.rewardedNoRewardCloseCount;
+    summary.interstitialInterruptedCount += ads.interstitialInterruptedCount;
+    summary.rewardedInterruptedCount += ads.rewardedInterruptedCount;
+    if (ads.totalWatchCount > 0 && ads.totalPaidImpressions === 0) {
+      summary.paidImpressionMissingUsers++;
+    }
+  });
+
+  summary.totalWatchCount = summary.interstitialWatchCount + summary.rewardedWatchCount;
+  summary.totalPaidImpressions = summary.interstitialPaidImpressions + summary.rewardedPaidImpressions;
+  summary.totalRevenue = summary.interstitialRevenue + summary.rewardedRevenue;
+  summary.totalInterruptedCount = summary.interstitialInterruptedCount + summary.rewardedInterruptedCount;
+  summary.avgInterstitialVisibleSeconds = summary.interstitialWatchCount > 0
+    ? (summary.interstitialVisibleMs / summary.interstitialWatchCount) / 1000
+    : 0;
+  const rewardedStarts = summary.rewardedWatchCount + summary.rewardedNoRewardCloseCount;
+  summary.avgRewardedVisibleSeconds = rewardedStarts > 0
+    ? (summary.rewardedVisibleMs / rewardedStarts) / 1000
+    : 0;
+  summary.rewardedNoRewardCloseRate = rewardedStarts > 0
+    ? summary.rewardedNoRewardCloseCount / rewardedStarts
+    : 0;
+  const totalAdCompletionsOrCloses = summary.totalWatchCount + summary.rewardedNoRewardCloseCount;
+  summary.interruptedRate = totalAdCompletionsOrCloses > 0
+    ? summary.totalInterruptedCount / totalAdCompletionsOrCloses
+    : 0;
+  summary.revenuePerPaidImpression = summary.totalPaidImpressions > 0
+    ? summary.totalRevenue / summary.totalPaidImpressions
+    : 0;
+  summary.ecpm = summary.revenuePerPaidImpression * 1000;
+
+  return summary;
+}
+
 function renderPlatformSummaryTable(rows) {
   if (!rows.length) {
     els.summaryTableBody.innerHTML = `<tr><td colspan="5" class="table-empty">No active profiles in this range yet.</td></tr>`;
@@ -1955,12 +2228,27 @@ function formatDecimal(v) {
   return new Intl.NumberFormat(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 }).format(v || 0);
 }
 
+function formatPercent(ratio) {
+  const pct = (Number(ratio) || 0) * 100;
+  return `${pct.toFixed(pct >= 10 ? 0 : 1)}%`;
+}
+
 function formatCurrency(v) {
   const num = Number(v) || 0;
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: config.dashboard.currency || "USD",
     maximumFractionDigits: num >= 1000 ? 0 : 2
+  }).format(num);
+}
+
+function formatAdRevenue(v) {
+  const num = Number(v) || 0;
+  const maximumFractionDigits = num > 0 && num < 0.01 ? 6 : (num >= 1000 ? 0 : 2);
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: config.dashboard.currency || "USD",
+    maximumFractionDigits
   }).format(num);
 }
 

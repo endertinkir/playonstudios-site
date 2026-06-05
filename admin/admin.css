@@ -504,7 +504,7 @@ h1, h2, h3 {
 /* ==== Filter grid ==== */
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 14px;
   align-items: end;
 }
@@ -1008,6 +1008,54 @@ h1, h2, h3 {
   font-variant-numeric: tabular-nums;
 }
 
+/* ==== Ad health ==== */
+.ad-health-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.ad-health-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.ad-health-item span {
+  display: grid;
+  gap: 3px;
+}
+
+.ad-health-item strong {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.ad-health-item em {
+  color: var(--text-muted);
+  font-style: normal;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.ad-health-item b {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ad-health-item.is-positive b { color: var(--green); }
+.ad-health-item.is-warning b { color: var(--gold); }
+.ad-health-item.is-danger b { color: var(--rose); }
+
 /* ==== Tables ==== */
 .table-wrap {
   overflow-x: auto;
@@ -1155,6 +1203,51 @@ h1, h2, h3 {
 
 .copy-id-button.is-copied code {
   color: var(--green);
+}
+
+.ad-flag-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 160px;
+}
+
+.ad-flag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.ad-flag.success {
+  border-color: rgba(142, 214, 175, 0.28);
+  background: rgba(142, 214, 175, 0.1);
+  color: var(--green);
+}
+
+.ad-flag.warning {
+  border-color: rgba(231, 201, 138, 0.3);
+  background: rgba(231, 201, 138, 0.1);
+  color: var(--gold);
+}
+
+.ad-flag.danger {
+  border-color: rgba(242, 159, 180, 0.3);
+  background: rgba(242, 159, 180, 0.1);
+  color: var(--rose);
+}
+
+.ad-flag-empty {
+  color: var(--text-subtle);
 }
 
 /* ==== Retention matrix ==== */
