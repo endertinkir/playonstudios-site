@@ -50,7 +50,7 @@
     referrerpolicy="no-referrer"
     defer
   ></script>
-  <script type="module" src="/admin/admin.js?v=20260605-ad-metrics"></script>
+  <script type="module" src="/admin/admin.js?v=20260605-dashboard-ux"></script>
 </head>
 <body class="page-admin">
   <div class="aurora" aria-hidden="true">
@@ -198,7 +198,8 @@
             </button>
           </div>
 
-          <p class="panel-feedback">Source: <code>users</code> + <code>studioDailyMetrics</code>. Player cohorts are derived from <code>level</code>, power usage and <code>updatedAt</code>; marketing metrics come from daily entries.</p>
+          <p class="panel-feedback">Source: <code>users</code> + <code>studioDailyMetrics</code>. User analytics use profile counters; Marketing uses daily metric rows.</p>
+          <div class="scope-strip" id="filterContext" aria-live="polite"></div>
           <p class="panel-feedback" id="dashboardNotice" hidden></p>
         </section>
 
@@ -304,7 +305,7 @@
               <strong class="kpi-value" id="kpiRevenue">$0</strong>
               <div class="kpi-foot">
                 <span class="kpi-delta" id="kpiRevenueDelta">—</span>
-                <span class="kpi-caption">Ad + IAP in window</span>
+                <span class="kpi-caption" id="kpiRevenueCaption">Ad + IAP in window</span>
               </div>
             </article>
           </section>
@@ -312,21 +313,21 @@
           <section class="kpi-strip ad-kpi-strip">
             <article class="panel kpi-card kpi-tone-green">
               <div class="kpi-head">
-                <span class="kpi-label">Estimated Ad Revenue</span>
+                <span class="kpi-label">User Ad Revenue</span>
               </div>
               <strong class="kpi-value" id="adTotalRevenue">$0</strong>
               <div class="kpi-foot">
-                <span class="kpi-caption">RevenueMicros ÷ 1,000,000</span>
+                <span class="kpi-caption">Lifetime counters on active profiles</span>
               </div>
             </article>
 
             <article class="panel kpi-card kpi-tone-gold">
               <div class="kpi-head">
-                <span class="kpi-label">Paid Impressions</span>
+                <span class="kpi-label">Paid Events</span>
               </div>
               <strong class="kpi-value" id="adPaidImpressions">0</strong>
               <div class="kpi-foot">
-                <span class="kpi-caption">AdMob paid impression events</span>
+                <span class="kpi-caption">AdMob paid impressions</span>
               </div>
             </article>
 
@@ -366,7 +367,7 @@
               <div class="panel-head">
                 <div>
                   <p class="section-kicker">User Ad Monetization</p>
-                  <h2>Interstitial vs rewarded counters</h2>
+                  <h2>Lifetime counters by ad format</h2>
                 </div>
               </div>
               <div class="table-wrap">
@@ -375,17 +376,17 @@
                     <tr>
                       <th>Format</th>
                       <th class="num">Revenue</th>
-                      <th class="num">Paid Impr.</th>
-                      <th class="num">Completed</th>
+                      <th class="num">Paid Events</th>
+                      <th class="num">Watched</th>
                       <th class="num">Avg Visible</th>
-                      <th class="num">Friction</th>
+                      <th class="num">Drop-off</th>
                       <th class="num">Interrupted</th>
                     </tr>
                   </thead>
                   <tbody id="adBreakdownBody"></tbody>
                 </table>
               </div>
-              <p class="panel-feedback">These are lifetime counters from <code>users</code>, scoped to profiles active in the selected date range and matching the current filters.</p>
+              <p class="panel-feedback">Revenue is <code>RevenueMicros / 1,000,000</code>. These are cumulative <code>users</code> counters scoped to profiles active in the selected range.</p>
             </article>
 
             <article class="panel insight-panel">
@@ -409,7 +410,7 @@
                 <div class="chip-group" id="trendChips">
                   <button type="button" class="chip is-active" data-trend="users">Players</button>
                   <button type="button" class="chip" data-trend="revenue">Revenue</button>
-                  <button type="button" class="chip" data-trend="downloads">Downloads</button>
+                  <button type="button" class="chip" data-trend="downloads">Installs</button>
                 </div>
               </div>
               <canvas id="trendChart" aria-label="Daily active trend"></canvas>
@@ -472,6 +473,30 @@
                 </table>
               </div>
               <p class="panel-feedback" id="countryEmptyNote" hidden>No country field detected on user documents. Write a write-once <code>installCountry</code> (ISO-2 code) at first launch to unlock a trusted breakdown.</p>
+            </article>
+
+            <article class="panel table-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Build Health</p>
+                  <h2>Active profiles by build</h2>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Build</th>
+                      <th class="num">Active</th>
+                      <th class="num">Avg Lvl</th>
+                      <th class="num">Ad Rev.</th>
+                      <th class="num">Paid Events</th>
+                      <th class="num">Interrupt</th>
+                    </tr>
+                  </thead>
+                  <tbody id="buildHealthBody"></tbody>
+                </table>
+              </div>
             </article>
 
             <article class="panel insight-panel">
@@ -582,14 +607,14 @@
               <div class="panel-head">
                 <div>
                   <p class="section-kicker">Top Players</p>
-                  <h2>Highest engagement by install date</h2>
+                  <h2 id="topPlayersTitle">Highest engagement by install date</h2>
                 </div>
                 <div class="chip-group" id="topPlayersChips">
                   <button type="button" class="chip is-active" data-top="engagement">Engagement</button>
                   <button type="button" class="chip" data-top="level">Level</button>
                   <button type="button" class="chip" data-top="powers">Powers</button>
                   <button type="button" class="chip" data-top="adRevenue">Ad Revenue</button>
-                  <button type="button" class="chip" data-top="adExposure">Ads</button>
+                  <button type="button" class="chip" data-top="adExposure">Ad Watches</button>
                 </div>
               </div>
               <div class="table-wrap">
@@ -617,7 +642,7 @@
                   <tbody id="topPlayersTableBody"></tbody>
                 </table>
               </div>
-              <p class="panel-feedback">Filtered by the selected install-date window, platform, cohort, and country.</p>
+              <p class="panel-feedback" id="topPlayersNote">Filtered by the selected install-date window, platform, cohort, country, and build.</p>
             </article>
           </section>
         </section>
@@ -778,6 +803,7 @@
               </div>
             </article>
           </section>
+          <p class="panel-feedback marketing-scope-note" id="marketingScopeNote" hidden></p>
 
           <section class="admin-grid">
             <article class="panel chart-panel chart-span-2">

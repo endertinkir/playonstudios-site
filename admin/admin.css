@@ -504,14 +504,50 @@ h1, h2, h3 {
 /* ==== Filter grid ==== */
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: 1.15fr 1fr 1fr 1fr 0.9fr 1.35fr 1.25fr minmax(112px, 0.8fr);
   gap: 14px;
   align-items: end;
 }
 
 .filter-action {
   align-self: end;
+  width: 100%;
   min-height: 48px;
+}
+
+.scope-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.scope-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.scope-pill span {
+  color: var(--text-subtle);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.scope-pill strong {
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ==== Tabs ==== */
@@ -988,6 +1024,7 @@ h1, h2, h3 {
 .pulse-item.is-positive .pulse-dot { background: rgba(142, 214, 175, 0.15); border-color: rgba(142, 214, 175, 0.3); color: var(--green); }
 .pulse-item.is-warning .pulse-dot { background: rgba(231, 201, 138, 0.15); border-color: rgba(231, 201, 138, 0.3); color: var(--gold); }
 .pulse-item.is-danger .pulse-dot { background: rgba(242, 159, 180, 0.15); border-color: rgba(242, 159, 180, 0.3); color: var(--rose); }
+.pulse-item.is-neutral .pulse-dot { background: rgba(138, 153, 173, 0.12); border-color: rgba(138, 153, 173, 0.24); color: var(--text-muted); }
 
 .pulse-title {
   font-size: 0.88rem;
@@ -1055,6 +1092,7 @@ h1, h2, h3 {
 .ad-health-item.is-positive b { color: var(--green); }
 .ad-health-item.is-warning b { color: var(--gold); }
 .ad-health-item.is-danger b { color: var(--rose); }
+.ad-health-item.is-neutral b { color: var(--text-muted); }
 
 /* ==== Tables ==== */
 .table-wrap {

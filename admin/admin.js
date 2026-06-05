@@ -104,17 +104,17 @@ function cacheEls() {
     "logoutButton", "loginPanel", "appPanel", "loginForm",
     "loginButton", "loginEmail", "loginPassword", "authFeedback",
     "rangePreset", "rangeStart", "rangeEnd", "platformFilter", "segmentFilter", "countryFilter", "buildFilter",
-    "refreshButton", "dataFreshness", "dashboardNotice",
+    "refreshButton", "dataFreshness", "dashboardNotice", "filterContext",
     // Overview KPIs
     "kpiTotalProfiles", "kpiTotalProfilesDelta",
     "kpiActiveProfiles", "kpiActiveProfilesDelta",
     "kpiActive30m", "kpiActive30mDelta",
     "kpiAvgLevel", "kpiAvgLevelDelta",
     "kpiEngagement", "kpiEngagementDelta",
-    "kpiRevenue", "kpiRevenueDelta",
+    "kpiRevenue", "kpiRevenueDelta", "kpiRevenueCaption",
     "adTotalRevenue", "adPaidImpressions", "adInterstitialWatches", "adRewardedCompleted", "adInterruptions",
     "adBreakdownBody", "adHealthList",
-    "summaryTableBody", "pulseList", "platformLegend", "trendTitle", "topCountriesBody", "countryEmptyNote",
+    "summaryTableBody", "pulseList", "platformLegend", "trendTitle", "topCountriesBody", "countryEmptyNote", "buildHealthBody",
     // Users
     "retentionBody", "retentionNote",
     "segWhales", "segWhalesBar",
@@ -122,7 +122,7 @@ function cacheEls() {
     "segCasual", "segCasualBar",
     "segBeginner", "segBeginnerBar",
     "segChurn", "segChurnBar",
-    "topPlayersTableBody",
+    "topPlayersTableBody", "topPlayersTitle", "topPlayersNote",
     // Levels
     "kpiLvlAvg", "kpiLvlMedian", "kpiLvlP75", "kpiLvlMax",
     "progressionFunnel", "levelCohortBody",
@@ -132,7 +132,7 @@ function cacheEls() {
     "mkSpend", "mkSpendDelta",
     "mkRoas", "mkRoasDelta",
     "mkDownloads", "mkDownloadsDelta",
-    "mkCpi", "mkArpdau",
+    "mkCpi", "mkArpdau", "marketingScopeNote",
     "marketingPlatformBody", "gamesTableBody"
   ];
   ids.forEach((id) => { els[id] = document.getElementById(id); });
@@ -361,6 +361,11 @@ function renderDashboardNotice() {
   if (state.loadErrors.users) notes.push(state.loadErrors.users);
   if (state.loadErrors.games) notes.push(state.loadErrors.games);
   if (state.loadErrors.metrics) notes.push(state.loadErrors.metrics);
+
+  const build = els.buildFilter ? els.buildFilter.value : "all";
+  if (!state.loadErrors.metrics && build !== "all") {
+    notes.push("Build filter scopes user analytics only; Marketing metrics stay unfiltered until studioDailyMetrics rows include buildNumber.");
+  }
 
   const country = els.countryFilter ? els.countryFilter.value : "all";
   if (!state.loadErrors.metrics && country !== "all") {
@@ -735,11 +740,39 @@ function renderDashboard() {
   const prevActive = getPreviousActiveUsers();
   const scoped = getScopedUsers();
 
+  renderFilterContext(active, scoped);
   renderOverview(active, prevActive, scoped);
   renderUsersTab(active, scoped);
   renderLevelsTab(active);
   renderMarketingTab();
   renderDashboardNotice();
+}
+
+function renderFilterContext(active, scoped) {
+  if (!els.filterContext) return;
+  const bounds = getRangeBounds();
+  const installed = getInstalledUsers(bounds);
+  const build = els.buildFilter ? els.buildFilter.value : "all";
+  const platform = els.platformFilter.value;
+  const country = els.countryFilter ? els.countryFilter.value : "all";
+  const segment = els.segmentFilter.value;
+  const chips = [
+    { label: "Range", value: formatRangeLabel(bounds) },
+    { label: "Scoped profiles", value: formatNumber(scoped.length) },
+    { label: "Active in range", value: formatNumber(active.length) },
+    { label: "Installs in range", value: formatNumber(installed.length) },
+    { label: "Platform", value: platform === "all" ? "All" : platformLabel(platform) },
+    { label: "Country", value: country === "all" ? "All" : countryLabel(country) },
+    { label: "Build", value: build === "all" ? "All" : (build === "unknown" ? "Unknown" : build) },
+    { label: "Cohort", value: segmentFilterLabel(segment) }
+  ];
+
+  els.filterContext.innerHTML = chips.map((chip) => `
+    <span class="scope-pill">
+      <span>${escapeHtml(chip.label)}</span>
+      <strong>${escapeHtml(chip.value)}</strong>
+    </span>
+  `).join("");
 }
 
 // ---- Overview ----
@@ -771,6 +804,10 @@ function renderOverview(active, prevActive, scoped) {
   setKpi(els.kpiAvgLevel, els.kpiAvgLevelDelta, avgLevel, prevAvgLevel, "decimal");
   setKpi(els.kpiEngagement, els.kpiEngagementDelta, avgEng, prevAvgEng, "count");
   setKpi(els.kpiRevenue, els.kpiRevenueDelta, revenue, prevRevenue, "currency");
+  setText(
+    els.kpiRevenueCaption,
+    (els.buildFilter && els.buildFilter.value !== "all") ? "Daily metrics, not build-scoped" : "Ad + IAP in window"
+  );
   renderAdOverview(active);
 
   const platformRows = buildPlatformRows(active);
@@ -779,6 +816,7 @@ function renderOverview(active, prevActive, scoped) {
   renderTrendChart();
   renderPulseList(active, scoped, metricsCurrent, metricsPrev);
   renderTopCountriesTable(active);
+  renderBuildHealthTable(active);
 }
 
 function renderTopCountriesTable(users) {
@@ -805,6 +843,26 @@ function renderTopCountriesTable(users) {
       <td class="num">${formatNumber(r.profiles)}</td>
       <td class="num">${((r.profiles / total) * 100).toFixed(1)}%</td>
       <td class="num">${formatDecimal(r.avgLevel)}</td>
+    </tr>
+  `).join("");
+}
+
+function renderBuildHealthTable(users) {
+  if (!els.buildHealthBody) return;
+  const rows = buildBuildRows(users).slice(0, 8);
+  if (!rows.length) {
+    els.buildHealthBody.innerHTML = `<tr><td colspan="6" class="table-empty">No active profiles in this range.</td></tr>`;
+    return;
+  }
+
+  els.buildHealthBody.innerHTML = rows.map((r) => `
+    <tr>
+      <td><strong>${escapeHtml(r.build === "unknown" ? "Unknown" : r.build)}</strong></td>
+      <td class="num">${formatNumber(r.profiles)}</td>
+      <td class="num">${formatDecimal(r.avgLevel)}</td>
+      <td class="num">${formatAdRevenue(r.adRevenue)}</td>
+      <td class="num">${formatNumber(r.paidEvents)}</td>
+      <td class="num">${formatNumber(r.interruptions)}</td>
     </tr>
   `).join("");
 }
@@ -870,13 +928,13 @@ function renderAdHealthList(summary) {
       label: "Estimated eCPM",
       value: summary.ecpm > 0 ? formatAdRevenue(summary.ecpm) : "—",
       detail: "Revenue per 1,000 paid impressions",
-      tone: summary.ecpm > 0 ? "is-positive" : "is-warning"
+      tone: summary.ecpm > 0 ? "is-positive" : "is-neutral"
     },
     {
       label: "Revenue / paid impression",
       value: summary.revenuePerPaidImpression > 0 ? formatAdRevenue(summary.revenuePerPaidImpression) : "—",
       detail: "Micros revenue divided by paid impression count",
-      tone: summary.revenuePerPaidImpression > 0 ? "is-positive" : "is-warning"
+      tone: summary.revenuePerPaidImpression > 0 ? "is-positive" : "is-neutral"
     },
     {
       label: "Reward drop-off",
@@ -894,7 +952,7 @@ function renderAdHealthList(summary) {
       label: "Missing paid events",
       value: formatNumber(summary.paidImpressionMissingUsers),
       detail: "Users with ad watches but no paid impression event",
-      tone: summary.paidImpressionMissingUsers > 0 ? "is-warning" : "is-positive"
+      tone: summary.paidImpressionMissingUsers > 0 ? "is-warning" : (summary.totalWatchCount > 0 ? "is-positive" : "is-neutral")
     }
   ];
 
@@ -959,21 +1017,21 @@ function renderPulseList(active, scoped, metricsCurrent, metricsPrev) {
       title: "Active rate",
       detail: `${formatNumber(active.length)} of ${formatNumber(scoped.length)} profiles active in window`,
       value: `${activeRate.toFixed(1)}%`,
-      tone: activeRate >= 25 ? "is-positive" : activeRate >= 10 ? "is-warning" : "is-danger"
+      tone: scoped.length === 0 ? "is-neutral" : activeRate >= 25 ? "is-positive" : activeRate >= 10 ? "is-warning" : "is-danger"
     },
     {
       icon: "👑",
       title: "Whale share",
       detail: "Premium-segment players (L50+, heavy)",
       value: `${formatNumber(whales)}`,
-      tone: whales > 0 ? "is-positive" : "is-warning"
+      tone: whales > 0 ? "is-positive" : "is-neutral"
     },
     {
       icon: "⏳",
       title: "Churn risk",
       detail: "Profiles idle for 14+ days",
       value: `${formatNumber(churnCount)}`,
-      tone: churnCount === 0 ? "is-positive" : churnCount > scoped.length * 0.4 ? "is-danger" : "is-warning"
+      tone: scoped.length === 0 ? "is-neutral" : churnCount === 0 ? "is-positive" : churnCount > scoped.length * 0.4 ? "is-danger" : "is-warning"
     }
   ];
 
@@ -983,14 +1041,14 @@ function renderPulseList(active, scoped, metricsCurrent, metricsPrev) {
       title: "ROAS",
       detail: "Revenue divided by ad spend in window",
       value: roas > 0 ? `${roas.toFixed(2)}×` : "—",
-      tone: roas >= 1.5 ? "is-positive" : roas >= 1 ? "is-warning" : "is-danger"
+      tone: spend <= 0 ? "is-neutral" : roas >= 1.5 ? "is-positive" : roas >= 1 ? "is-warning" : "is-danger"
     });
     items.push({
       icon: "🔥",
       title: "Stickiness",
       detail: "DAU ÷ MAU over window",
       value: stickiness > 0 ? `${stickiness.toFixed(1)}%` : "—",
-      tone: stickiness >= 20 ? "is-positive" : stickiness >= 10 ? "is-warning" : "is-danger"
+      tone: avgMau <= 0 ? "is-neutral" : stickiness >= 20 ? "is-positive" : stickiness >= 10 ? "is-warning" : "is-danger"
     });
   }
 
@@ -1096,6 +1154,10 @@ function retentionCell(metric) {
 
 function renderTopPlayersTable() {
   const users = getInstalledUsers();
+  const mode = getTopPlayersModeCopy(state.topMode);
+  setText(els.topPlayersTitle, mode.title);
+  setText(els.topPlayersNote, `${mode.note} Filtered by the selected install-date window, platform, cohort, country, and build.`);
+
   const sorted = [...users].sort((a, b) => {
     if (state.topMode === "level") return b.level - a.level;
     if (state.topMode === "powers") return b.powerUses - a.powerUses;
@@ -1139,6 +1201,32 @@ function renderTopPlayersTable() {
       <td>${formatDate(u.createdAt)}</td>
     </tr>
   `).join("");
+}
+
+function getTopPlayersModeCopy(mode) {
+  const copy = {
+    level: {
+      title: "Highest level by install date",
+      note: "Sorted by current level."
+    },
+    powers: {
+      title: "Highest power usage by install date",
+      note: "Sorted by hints, shuffles, and undos."
+    },
+    adRevenue: {
+      title: "Highest ad revenue by install date",
+      note: "Sorted by user ad revenue from RevenueMicros / 1,000,000."
+    },
+    adExposure: {
+      title: "Highest ad exposure by install date",
+      note: "Sorted by interstitial watches plus rewarded completions."
+    },
+    engagement: {
+      title: "Highest engagement by install date",
+      note: "Sorted by weighted level and power usage."
+    }
+  };
+  return copy[mode] || copy.engagement;
 }
 
 function renderAdFlags(user) {
@@ -1301,6 +1389,7 @@ function renderMarketingTab() {
   setDelta(els.mkRoasDelta, roas, prevRoas);
   els.mkCpi.textContent = formatCurrency(cpi);
   els.mkArpdau.textContent = formatCurrency(arpdau);
+  renderMarketingScopeNote(current);
 
   renderRevenueStackChart(current, bounds);
   renderSpendRevenueChart(current, bounds);
@@ -1308,6 +1397,23 @@ function renderMarketingTab() {
   renderMarketingPlatformTable(current);
   renderCountryMarketingTable(current);
   renderGamesTable(current);
+}
+
+function renderMarketingScopeNote(metrics) {
+  if (!els.marketingScopeNote) return;
+  const notes = [];
+  const build = els.buildFilter ? els.buildFilter.value : "all";
+  const country = els.countryFilter ? els.countryFilter.value : "all";
+
+  if (build !== "all") {
+    notes.push("Build filter is user-scoped; these Marketing KPIs still use all build rows because studioDailyMetrics has no buildNumber field.");
+  }
+  if (country !== "all" && !metrics.some((m) => m.country && m.country !== "unknown")) {
+    notes.push("Country filter is active, but daily metric rows in this window do not carry country yet.");
+  }
+
+  els.marketingScopeNote.hidden = notes.length === 0;
+  els.marketingScopeNote.textContent = notes.join(" ");
 }
 
 function renderCountryMarketingTable(metrics) {
@@ -1434,8 +1540,8 @@ function renderTrendChart() {
   } else if (state.trendMode === "downloads") {
     const byDay = groupSum(getDownloadUsers(bounds), (u) => toIsoDate(u.createdAt), () => 1);
     data = days.map((d) => byDay.get(d) || 0);
-    label = "Downloads";
-    setText(els.trendTitle, "Daily downloads");
+    label = "Installs";
+    setText(els.trendTitle, "Daily installs");
     color = PALETTE.blue;
     fillColor = "rgba(125, 176, 230, 0.2)";
   } else {
@@ -1965,6 +2071,38 @@ function buildCountryRows(users) {
     .sort((a, b) => b.profiles - a.profiles);
 }
 
+function buildBuildRows(users) {
+  const map = new Map();
+  users.forEach((u) => {
+    const key = u.buildNumber || "unknown";
+    const entry = map.get(key) || {
+      build: key,
+      profiles: 0,
+      levelSum: 0,
+      adRevenue: 0,
+      paidEvents: 0,
+      interruptions: 0
+    };
+    entry.profiles++;
+    entry.levelSum += u.level;
+    entry.adRevenue += u.ads.totalRevenue;
+    entry.paidEvents += u.ads.totalPaidImpressions;
+    entry.interruptions += u.ads.totalInterruptedCount;
+    map.set(key, entry);
+  });
+
+  return Array.from(map.values())
+    .map((e) => ({
+      ...e,
+      avgLevel: e.profiles ? e.levelSum / e.profiles : 0
+    }))
+    .sort((a, b) => {
+      if (a.build === "unknown") return 1;
+      if (b.build === "unknown") return -1;
+      return Number(b.build) - Number(a.build) || b.build.localeCompare(a.build);
+    });
+}
+
 function buildCountryMarketingRows(metrics) {
   const map = new Map();
   metrics.forEach((m) => {
@@ -2269,6 +2407,10 @@ function formatDate(date) {
   }).format(date);
 }
 
+function formatRangeLabel(bounds) {
+  return `${formatShortDate(toIsoDate(bounds.start))} - ${formatShortDate(toIsoDate(bounds.end))}`;
+}
+
 function formatShortDate(iso) {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
@@ -2285,6 +2427,20 @@ function platformLabel(v) {
 function segmentLabel(seg) {
   const map = { whale: "Whale", pro: "Pro", casual: "Casual", beginner: "Beginner" };
   return map[seg] || "—";
+}
+
+function segmentFilterLabel(seg) {
+  const map = {
+    all: "All",
+    whale: "Whales",
+    pro: "Pro",
+    casual: "Casual",
+    beginner: "Beginner",
+    active30m: "Active 30m",
+    active7: "Active 7d",
+    churnrisk: "Churn risk"
+  };
+  return map[seg] || seg || "All";
 }
 
 function normalizeAuthError(error) {
