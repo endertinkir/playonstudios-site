@@ -792,13 +792,12 @@ function renderOverview(active, prevActive, scoped) {
   const avgEng = average(active.map((u) => u.engagementScore));
   const revenue = sum(metricsCurrent.map((m) => m.revenue || (m.adRevenue + m.iapRevenue)));
 
-  const prevTotal = state.users.length; // total profiles doesn't vary by window
   const prevActiveCount = prevActive.length;
   const prevAvgLevel = average(prevActive.map((u) => u.level));
   const prevAvgEng = average(prevActive.map((u) => u.engagementScore));
   const prevRevenue = sum(metricsPrev.map((m) => m.revenue || (m.adRevenue + m.iapRevenue)));
 
-  setKpi(els.kpiTotalProfiles, els.kpiTotalProfilesDelta, total, prevTotal, "count");
+  setScopedProfilesKpi(total);
   setKpi(els.kpiActiveProfiles, els.kpiActiveProfilesDelta, activeCount, prevActiveCount, "count");
   setKpi(els.kpiActive30m, els.kpiActive30mDelta, active30mCount, prevActive30mCount, "count");
   setKpi(els.kpiAvgLevel, els.kpiAvgLevelDelta, avgLevel, prevAvgLevel, "decimal");
@@ -923,6 +922,8 @@ function renderAdBreakdownTable(summary) {
 
 function renderAdHealthList(summary) {
   if (!els.adHealthList) return;
+  const hasRewardedExposure = summary.rewardedStarts > 0;
+  const hasAdExposure = summary.totalAdCompletionsOrCloses > 0;
   const items = [
     {
       label: "Estimated eCPM",
@@ -938,15 +939,15 @@ function renderAdHealthList(summary) {
     },
     {
       label: "Reward drop-off",
-      value: summary.rewardedNoRewardCloseRate > 0 ? formatPercent(summary.rewardedNoRewardCloseRate) : "0%",
+      value: hasRewardedExposure ? formatPercent(summary.rewardedNoRewardCloseRate) : "—",
       detail: `${formatNumber(summary.rewardedNoRewardCloseCount)} rewarded closes before reward`,
-      tone: summary.rewardedNoRewardCloseRate >= 0.2 ? "is-danger" : summary.rewardedNoRewardCloseRate > 0 ? "is-warning" : "is-positive"
+      tone: !hasRewardedExposure ? "is-neutral" : summary.rewardedNoRewardCloseRate >= 0.2 ? "is-danger" : summary.rewardedNoRewardCloseRate > 0 ? "is-warning" : "is-positive"
     },
     {
       label: "Ad interruptions",
-      value: summary.interruptedRate > 0 ? formatPercent(summary.interruptedRate) : "0%",
+      value: hasAdExposure ? formatPercent(summary.interruptedRate) : "—",
       detail: `${formatNumber(summary.totalInterruptedCount)} sessions resumed after an unfinished ad`,
-      tone: summary.interruptedRate >= 0.05 ? "is-danger" : summary.interruptedRate > 0 ? "is-warning" : "is-positive"
+      tone: !hasAdExposure ? "is-neutral" : summary.interruptedRate >= 0.05 ? "is-danger" : summary.interruptedRate > 0 ? "is-warning" : "is-positive"
     },
     {
       label: "Missing paid events",
@@ -970,6 +971,18 @@ function renderAdHealthList(summary) {
 function setKpi(valueEl, deltaEl, curr, prev, kind) {
   if (valueEl) valueEl.textContent = formatValue(curr, kind);
   setDelta(deltaEl, curr, prev);
+}
+
+function setScopedProfilesKpi(scopedCount) {
+  if (els.kpiTotalProfiles) els.kpiTotalProfiles.textContent = formatNumber(scopedCount);
+  if (!els.kpiTotalProfilesDelta) return;
+  const allCount = state.users.length;
+  let note = "—";
+  if (allCount > 0) {
+    note = scopedCount === allCount ? "all" : `${formatPercent(scopedCount / allCount)} of all`;
+  }
+  els.kpiTotalProfilesDelta.textContent = note;
+  els.kpiTotalProfilesDelta.className = "kpi-delta is-neutral";
 }
 
 function setDelta(deltaEl, curr, prev) {
@@ -2180,16 +2193,16 @@ function buildAdSummary(users) {
   summary.avgInterstitialVisibleSeconds = summary.interstitialWatchCount > 0
     ? (summary.interstitialVisibleMs / summary.interstitialWatchCount) / 1000
     : 0;
-  const rewardedStarts = summary.rewardedWatchCount + summary.rewardedNoRewardCloseCount;
-  summary.avgRewardedVisibleSeconds = rewardedStarts > 0
-    ? (summary.rewardedVisibleMs / rewardedStarts) / 1000
+  summary.rewardedStarts = summary.rewardedWatchCount + summary.rewardedNoRewardCloseCount;
+  summary.avgRewardedVisibleSeconds = summary.rewardedStarts > 0
+    ? (summary.rewardedVisibleMs / summary.rewardedStarts) / 1000
     : 0;
-  summary.rewardedNoRewardCloseRate = rewardedStarts > 0
-    ? summary.rewardedNoRewardCloseCount / rewardedStarts
+  summary.rewardedNoRewardCloseRate = summary.rewardedStarts > 0
+    ? summary.rewardedNoRewardCloseCount / summary.rewardedStarts
     : 0;
-  const totalAdCompletionsOrCloses = summary.totalWatchCount + summary.rewardedNoRewardCloseCount;
-  summary.interruptedRate = totalAdCompletionsOrCloses > 0
-    ? summary.totalInterruptedCount / totalAdCompletionsOrCloses
+  summary.totalAdCompletionsOrCloses = summary.totalWatchCount + summary.rewardedNoRewardCloseCount;
+  summary.interruptedRate = summary.totalAdCompletionsOrCloses > 0
+    ? summary.totalInterruptedCount / summary.totalAdCompletionsOrCloses
     : 0;
   summary.revenuePerPaidImpression = summary.totalPaidImpressions > 0
     ? summary.totalRevenue / summary.totalPaidImpressions

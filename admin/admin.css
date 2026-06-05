@@ -735,6 +735,12 @@ h1, h2, h3 {
   border-color: rgba(242, 159, 180, 0.4);
 }
 
+.kpi-delta.is-neutral {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.035);
+  border-color: var(--line);
+}
+
 /* ==== Admin grid (panels) ==== */
 .admin-grid {
   display: grid;
@@ -1043,6 +1049,14 @@ h1, h2, h3 {
   font-size: 1.05rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+.quick-pulse-panel .pulse-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.quick-pulse-panel .pulse-item {
+  min-height: 72px;
 }
 
 /* ==== Ad health ==== */

@@ -35,7 +35,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/admin/admin.css" />
+  <link rel="stylesheet" href="/admin/admin.css?v=20260605-dashboard-polish" />
   <!--
     SRI: the `integrity` attribute is intentionally omitted because the hash must be
     generated locally from the exact bytes your CDN serves. Generate with:
@@ -50,7 +50,7 @@
     referrerpolicy="no-referrer"
     defer
   ></script>
-  <script type="module" src="/admin/admin.js?v=20260605-dashboard-ux"></script>
+  <script type="module" src="/admin/admin.js?v=20260605-dashboard-polish"></script>
 </head>
 <body class="page-admin">
   <div class="aurora" aria-hidden="true">
@@ -186,7 +186,7 @@
             </label>
 
             <label class="field">
-              <span>Install country</span>
+              <span>Country</span>
               <select id="countryFilter">
                 <option value="all">All countries</option>
               </select>
@@ -230,12 +230,12 @@
                 <span class="kpi-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M6 17V9"/><path d="M12 17V5"/><path d="M18 17v-7"/></svg>
                 </span>
-                <span class="kpi-label">Total Profiles</span>
+                <span class="kpi-label">Scoped Profiles</span>
               </div>
               <strong class="kpi-value" id="kpiTotalProfiles">0</strong>
               <div class="kpi-foot">
                 <span class="kpi-delta" id="kpiTotalProfilesDelta">—</span>
-                <span class="kpi-caption">All player documents</span>
+                <span class="kpi-caption">After current user filters</span>
               </div>
             </article>
 
@@ -362,7 +362,7 @@
             </article>
           </section>
 
-          <section class="admin-grid">
+          <section class="admin-grid overview-summary-grid">
             <article class="panel table-panel chart-span-2">
               <div class="panel-head">
                 <div>
@@ -491,7 +491,7 @@
                       <th class="num">Avg Lvl</th>
                       <th class="num">Ad Rev.</th>
                       <th class="num">Paid Events</th>
-                      <th class="num">Interrupt</th>
+                      <th class="num">Interrupts</th>
                     </tr>
                   </thead>
                   <tbody id="buildHealthBody"></tbody>
@@ -499,7 +499,7 @@
               </div>
             </article>
 
-            <article class="panel insight-panel">
+            <article class="panel insight-panel quick-pulse-panel chart-span-3">
               <div class="panel-head">
                 <div>
                   <p class="section-kicker">Quick Pulse</p>
@@ -632,7 +632,7 @@
                       <th class="num">Undos</th>
                       <th class="num">Score</th>
                       <th class="num">Ad Watches</th>
-                      <th class="num">Paid Impr.</th>
+                      <th class="num">Paid Events</th>
                       <th class="num">Ad Revenue</th>
                       <th>Ad Flags</th>
                       <th>Last Active</th>
