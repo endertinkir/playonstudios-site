@@ -26,7 +26,7 @@ const AD_DELTA_FIELDS = [
 exports.rollupUserDailyAdMetrics = onDocumentWritten(
   {
     document: "users/{userId}",
-    region: "us-central1"
+    region: "europe-west1"
   },
   async (event) => {
     if (!event.data?.after.exists) return null;

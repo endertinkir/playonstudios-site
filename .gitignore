@@ -1,6 +1,9 @@
 # macOS Finder metadata
 .DS_Store
 
+# Local Firebase Functions dependencies
+functions/node_modules/
+
 # Unused local legacy assets not wired into the current site
 site.css
 assets/play-on-logo.png
