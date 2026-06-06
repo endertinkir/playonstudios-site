@@ -35,7 +35,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/admin/admin.css?v=20260605-dashboard-polish" />
+  <link rel="stylesheet" href="/admin/admin.css?v=20260606-daily-ad-rollups" />
   <!--
     SRI: the `integrity` attribute is intentionally omitted because the hash must be
     generated locally from the exact bytes your CDN serves. Generate with:
@@ -50,7 +50,7 @@
     referrerpolicy="no-referrer"
     defer
   ></script>
-  <script type="module" src="/admin/admin.js?v=20260605-dashboard-polish"></script>
+  <script type="module" src="/admin/admin.js?v=20260606-daily-ad-rollups"></script>
 </head>
 <body class="page-admin">
   <div class="aurora" aria-hidden="true">
@@ -313,11 +313,11 @@
           <section class="kpi-strip ad-kpi-strip">
             <article class="panel kpi-card kpi-tone-green">
               <div class="kpi-head">
-                <span class="kpi-label">User Ad Revenue</span>
+                <span class="kpi-label">Daily Ad Revenue</span>
               </div>
               <strong class="kpi-value" id="adTotalRevenue">$0</strong>
               <div class="kpi-foot">
-                <span class="kpi-caption">Lifetime counters on active profiles</span>
+                <span class="kpi-caption">Selected range deltas</span>
               </div>
             </article>
 
@@ -327,7 +327,7 @@
               </div>
               <strong class="kpi-value" id="adPaidImpressions">0</strong>
               <div class="kpi-foot">
-                <span class="kpi-caption">AdMob paid impressions</span>
+                <span class="kpi-caption">Selected range deltas</span>
               </div>
             </article>
 
@@ -367,7 +367,7 @@
               <div class="panel-head">
                 <div>
                   <p class="section-kicker">User Ad Monetization</p>
-                  <h2>Lifetime counters by ad format</h2>
+                  <h2>Daily deltas by ad format</h2>
                 </div>
               </div>
               <div class="table-wrap">
@@ -386,7 +386,7 @@
                   <tbody id="adBreakdownBody"></tbody>
                 </table>
               </div>
-              <p class="panel-feedback">Revenue is <code>RevenueMicros / 1,000,000</code>. These are cumulative <code>users</code> counters scoped to profiles active in the selected range.</p>
+              <p class="panel-feedback">Revenue is <code>RevenueMicros / 1,000,000</code>. Daily values come from Cloud Function deltas written to <code>userDailyAdMetrics</code>.</p>
             </article>
 
             <article class="panel insight-panel">
@@ -606,39 +606,26 @@
             <article class="panel table-panel chart-span-3">
               <div class="panel-head">
                 <div>
-                  <p class="section-kicker">Top Players</p>
+                  <p class="section-kicker">User Explorer</p>
                   <h2 id="topPlayersTitle">Highest engagement by install date</h2>
                 </div>
-                <div class="chip-group" id="topPlayersChips">
-                  <button type="button" class="chip is-active" data-top="engagement">Engagement</button>
-                  <button type="button" class="chip" data-top="level">Level</button>
-                  <button type="button" class="chip" data-top="powers">Powers</button>
-                  <button type="button" class="chip" data-top="adRevenue">Ad Revenue</button>
-                  <button type="button" class="chip" data-top="adExposure">Ad Watches</button>
+                <div class="table-control-stack">
+                  <div class="chip-group" id="userViewChips" aria-label="User table view">
+                    <button type="button" class="chip is-active" data-user-view="players">Players</button>
+                    <button type="button" class="chip" data-user-view="monetization">Monetization</button>
+                    <button type="button" class="chip" data-user-view="adHealth">Ad Health</button>
+                    <button type="button" class="chip" data-user-view="progression">Progression</button>
+                  </div>
+                  <div class="chip-group" id="topPlayersChips" aria-label="User table sorting">
+                    <button type="button" class="chip is-active" data-top="engagement">Engagement</button>
+                    <button type="button" class="chip" data-top="level">Level</button>
+                    <button type="button" class="chip" data-top="recent">Recent</button>
+                  </div>
                 </div>
               </div>
               <div class="table-wrap">
                 <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>User ID</th>
-                      <th>Segment</th>
-                      <th>Platform</th>
-                      <th>Country</th>
-                      <th class="num">Build</th>
-                      <th class="num">Level</th>
-                      <th class="num">Hints</th>
-                      <th class="num">Shuffles</th>
-                      <th class="num">Undos</th>
-                      <th class="num">Score</th>
-                      <th class="num">Ad Watches</th>
-                      <th class="num">Paid Events</th>
-                      <th class="num">Ad Revenue</th>
-                      <th>Ad Flags</th>
-                      <th>Last Active</th>
-                      <th>Install Date</th>
-                    </tr>
-                  </thead>
+                  <thead id="topPlayersTableHead"></thead>
                   <tbody id="topPlayersTableBody"></tbody>
                 </table>
               </div>

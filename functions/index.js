@@ -1,0 +1,192 @@
+const admin = require("firebase-admin");
+const { FieldValue } = require("firebase-admin/firestore");
+const { logger } = require("firebase-functions");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+
+admin.initializeApp();
+
+const db = admin.firestore();
+const DASHBOARD_TIME_ZONE = "Europe/Istanbul";
+
+const AD_DELTA_FIELDS = [
+  "interstitialAdWatchCount",
+  "rewardedAdWatchCount",
+  "interstitialPaidImpressionCount",
+  "rewardedPaidImpressionCount",
+  "interstitialAdRevenueMicros",
+  "rewardedAdRevenueMicros",
+  "interstitialAdTotalVisibleMs",
+  "rewardedAdTotalVisibleMs",
+  "interstitialAdShortCloseCount",
+  "rewardedAdNoRewardCloseCount",
+  "interstitialAdInterruptedCount",
+  "rewardedAdInterruptedCount"
+];
+
+exports.rollupUserDailyAdMetrics = onDocumentWritten(
+  {
+    document: "users/{userId}",
+    region: "us-central1"
+  },
+  async (event) => {
+    if (!event.data?.after.exists) return null;
+
+    const userId = event.params.userId;
+    const before = event.data.before.exists ? event.data.before.data() : {};
+    const after = event.data.after.data() || {};
+    const deltas = buildPositiveDeltas(before, after);
+
+    if (!deltas.hasPositiveDelta) return null;
+
+    const eventDate = dateKeyForEvent(event.time);
+    const platform = normalizePlatform(after.lastSeenPlatform);
+    const country = normalizeCountry(
+      after.installCountry ||
+      after.downloadCountry ||
+      after.storeCountry ||
+      after.country ||
+      after.countryCode ||
+      after.lastSeenCountry
+    );
+    const buildNumber = normalizeBuildNumber(after.buildNumber);
+    const segment = computeSegment(readNumber(after.level), readNumber(after.hintCount) + readNumber(after.shuffleCount) + readNumber(after.undoCount));
+    const docId = [
+      eventDate,
+      safeSegment(platform),
+      safeSegment(country),
+      safeSegment(buildNumber),
+      safeSegment(segment),
+      safeSegment(userId)
+    ].join("__");
+
+    const ref = db.collection("userDailyAdMetrics").doc(docId);
+    const eventRef = db.collection("userDailyAdMetricRollupEvents").doc(safeSegment(event.id || `${userId}_${event.time}`));
+    const increments = {};
+    AD_DELTA_FIELDS.forEach((field) => {
+      if (deltas[field] > 0) increments[field] = FieldValue.increment(deltas[field]);
+    });
+
+    await db.runTransaction(async (transaction) => {
+      const existingEvent = await transaction.get(eventRef);
+      if (existingEvent.exists) return;
+
+      transaction.create(eventRef, {
+        userId,
+        date: eventDate,
+        source: "users-delta-rollup",
+        createdAt: FieldValue.serverTimestamp()
+      });
+      transaction.set(ref, {
+        ...increments,
+        uid: userId,
+        date: eventDate,
+        platform,
+        country,
+        buildNumber,
+        segment,
+        level: readNumber(after.level),
+        powerUses: readNumber(after.hintCount) + readNumber(after.shuffleCount) + readNumber(after.undoCount),
+        lastUserUpdatedAt: normalizeTimestamp(after.updatedAt),
+        updatedAt: FieldValue.serverTimestamp(),
+        source: "users-delta-rollup",
+        timeZone: DASHBOARD_TIME_ZONE
+      }, { merge: true });
+    });
+
+    logger.info("Rolled up user daily ad metrics", {
+      userId,
+      date: eventDate,
+      platform,
+      country,
+      buildNumber,
+      segment
+    });
+    return null;
+  }
+);
+
+function buildPositiveDeltas(before, after) {
+  const deltas = { hasPositiveDelta: false };
+  AD_DELTA_FIELDS.forEach((field) => {
+    const delta = readNumber(after[field]) - readNumber(before[field]);
+    const positiveDelta = delta > 0 ? delta : 0;
+    deltas[field] = positiveDelta;
+    if (positiveDelta > 0) deltas.hasPositiveDelta = true;
+  });
+  return deltas;
+}
+
+function dateKeyForEvent(eventTime) {
+  const date = eventTime ? new Date(eventTime) : new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: DASHBOARD_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function normalizeTimestamp(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value;
+  if (value instanceof Date) return admin.firestore.Timestamp.fromDate(value);
+  return null;
+}
+
+function normalizePlatform(value) {
+  if (!value) return "unknown";
+  const s = String(value).toLowerCase();
+  if (s.includes("android")) return "android";
+  if (s.includes("ios") || s.includes("iphone") || s.includes("ipad")) return "ios";
+  return s || "unknown";
+}
+
+function normalizeCountry(value) {
+  if (!value) return "unknown";
+  const s = String(value).trim().toUpperCase();
+  if (/^[A-Z]{2}$/.test(s)) return s;
+  const map = {
+    USA: "US",
+    GBR: "GB",
+    TUR: "TR",
+    DEU: "DE",
+    FRA: "FR",
+    ESP: "ES",
+    ITA: "IT",
+    RUS: "RU",
+    JPN: "JP",
+    KOR: "KR",
+    CHN: "CN",
+    IND: "IN",
+    BRA: "BR",
+    MEX: "MX",
+    CAN: "CA",
+    AUS: "AU",
+    NLD: "NL"
+  };
+  if (/^[A-Z]{3}$/.test(s)) return map[s] || s.slice(0, 2);
+  return "unknown";
+}
+
+function normalizeBuildNumber(value) {
+  if (value == null || value === "") return "unknown";
+  return String(value).trim() || "unknown";
+}
+
+function computeSegment(level, powerUses) {
+  if (level >= 50 && powerUses >= 20) return "whale";
+  if (level >= 20) return "pro";
+  if (level >= 5) return "casual";
+  return "beginner";
+}
+
+function safeSegment(value) {
+  return encodeURIComponent(String(value || "unknown")).replace(/\./g, "%2E");
+}
+
+function readNumber(value) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+}

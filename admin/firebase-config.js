@@ -12,7 +12,8 @@ export const PLAYON_ADMIN_CONFIG = {
   collections: {
     users: "users",
     games: "studioGames",
-    dailyMetrics: "studioDailyMetrics"
+    dailyMetrics: "studioDailyMetrics",
+    userDailyAdMetrics: "userDailyAdMetrics"
   },
   dashboard: {
     currency: "USD",

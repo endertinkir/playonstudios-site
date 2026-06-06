@@ -807,6 +807,7 @@ h1, h2, h3 {
 /* ==== Chip group ==== */
 .chip-group {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -833,6 +834,17 @@ h1, h2, h3 {
 .chip.is-active {
   color: #06101f;
   background: linear-gradient(135deg, var(--gold-soft), var(--gold));
+}
+
+.table-control-stack {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.table-control-stack .chip-group {
+  justify-content: flex-end;
 }
 
 /* ==== Segment cards ==== */
@@ -1386,4 +1398,6 @@ code {
   .admin-topbar { flex-direction: column; align-items: start; }
   .admin-topbar-meta { width: 100%; justify-content: space-between; }
   .panel-head { flex-direction: column; align-items: stretch; }
+  .table-control-stack { justify-items: start; }
+  .table-control-stack .chip-group { justify-content: flex-start; }
 }

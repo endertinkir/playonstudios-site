@@ -45,6 +45,29 @@ const RECENCY_BUCKETS = [
   { label: "90+ days",  maxDays: Infinity }
 ];
 
+const USER_TABLE_SORTS = {
+  players: [
+    { label: "Engagement", mode: "engagement" },
+    { label: "Level", mode: "level" },
+    { label: "Recent", mode: "recent" }
+  ],
+  monetization: [
+    { label: "Ad Revenue", mode: "adRevenue" },
+    { label: "Paid Events", mode: "paidEvents" },
+    { label: "Ad Watches", mode: "adExposure" }
+  ],
+  adHealth: [
+    { label: "Interruptions", mode: "interruptions" },
+    { label: "Missing Paid", mode: "missingPaid" },
+    { label: "Reward Drop-off", mode: "rewardDropOff" }
+  ],
+  progression: [
+    { label: "Level", mode: "level" },
+    { label: "Powers", mode: "powers" },
+    { label: "Engagement", mode: "engagement" }
+  ]
+};
+
 const PALETTE = {
   text: "#f4ecdc",
   muted: "#8a99ad",
@@ -71,14 +94,17 @@ const state = {
   users: [],
   games: [],
   metrics: [],
+  userDailyAdMetrics: [],
   loadErrors: {
     users: null,
     games: null,
-    metrics: null
+    metrics: null,
+    userDailyAdMetrics: null
   },
   charts: {},
   activeTab: "overview",
   trendMode: "users",
+  userTableView: "players",
   topMode: "engagement",
   levelFunnelMode: "overall"
 };
@@ -122,7 +148,7 @@ function cacheEls() {
     "segCasual", "segCasualBar",
     "segBeginner", "segBeginnerBar",
     "segChurn", "segChurnBar",
-    "topPlayersTableBody", "topPlayersTitle", "topPlayersNote",
+    "userViewChips", "topPlayersChips", "topPlayersTableHead", "topPlayersTableBody", "topPlayersTitle", "topPlayersNote",
     // Levels
     "kpiLvlAvg", "kpiLvlMedian", "kpiLvlP75", "kpiLvlMax",
     "progressionFunnel", "levelCohortBody",
@@ -165,13 +191,12 @@ function wireEvents() {
       renderTrendChart();
     });
   });
-  document.querySelectorAll("#topPlayersChips .chip").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      setActiveChip("#topPlayersChips", btn);
-      state.topMode = btn.dataset.top;
-      renderTopPlayersTable();
-    });
-  });
+  if (els.userViewChips) {
+    els.userViewChips.addEventListener("click", handleUserViewChipClick);
+  }
+  if (els.topPlayersChips) {
+    els.topPlayersChips.addEventListener("click", handleTopPlayersSortChipClick);
+  }
   if (els.topPlayersTableBody) {
     els.topPlayersTableBody.addEventListener("click", handleTopPlayersTableClick);
   }
@@ -187,6 +212,24 @@ function wireEvents() {
 function setActiveChip(scopeSelector, activeBtn) {
   document.querySelectorAll(`${scopeSelector} .chip`).forEach((b) => b.classList.remove("is-active"));
   activeBtn.classList.add("is-active");
+}
+
+function handleUserViewChipClick(event) {
+  const button = event.target.closest("[data-user-view]");
+  if (!button) return;
+  state.userTableView = button.dataset.userView || "players";
+  state.topMode = defaultTopModeForView(state.userTableView);
+  setActiveChip("#userViewChips", button);
+  renderUserSortChips();
+  renderTopPlayersTable();
+}
+
+function handleTopPlayersSortChipClick(event) {
+  const button = event.target.closest("[data-top]");
+  if (!button) return;
+  state.topMode = button.dataset.top;
+  setActiveChip("#topPlayersChips", button);
+  renderTopPlayersTable();
 }
 
 function switchTab(tab) {
@@ -296,7 +339,7 @@ async function refreshAll() {
   if (!state.db) return;
   els.refreshButton.classList.add("is-loading");
   try {
-    await Promise.all([loadUsers(), loadGames(), loadMetrics()]);
+    await Promise.all([loadUsers(), loadGames(), loadMetrics(), loadUserDailyAdMetrics()]);
     populateCountryOptions();
     populateBuildOptions();
     renderDashboard();
@@ -361,10 +404,15 @@ function renderDashboardNotice() {
   if (state.loadErrors.users) notes.push(state.loadErrors.users);
   if (state.loadErrors.games) notes.push(state.loadErrors.games);
   if (state.loadErrors.metrics) notes.push(state.loadErrors.metrics);
+  if (state.loadErrors.userDailyAdMetrics) notes.push(state.loadErrors.userDailyAdMetrics);
 
   const build = els.buildFilter ? els.buildFilter.value : "all";
   if (!state.loadErrors.metrics && build !== "all") {
     notes.push("Build filter scopes user analytics only; Marketing metrics stay unfiltered until studioDailyMetrics rows include buildNumber.");
+  }
+  const segment = els.segmentFilter ? els.segmentFilter.value : "all";
+  if (["active30m", "active7", "churnrisk"].includes(segment) && state.userDailyAdMetrics.length > 0) {
+    notes.push("Daily ad rollups use stored player segments, so activity/churn cohort filters apply only to user profile sections.");
   }
 
   const country = els.countryFilter ? els.countryFilter.value : "all";
@@ -438,6 +486,22 @@ async function loadMetrics() {
       config.collections.dailyMetrics || "studioDailyMetrics",
       error,
       "Marketing KPIs are unavailable until this collection becomes readable."
+    );
+  }
+}
+
+async function loadUserDailyAdMetrics() {
+  state.loadErrors.userDailyAdMetrics = null;
+  try {
+    const name = config.collections.userDailyAdMetrics || "userDailyAdMetrics";
+    const snap = await getDocs(collection(state.db, name));
+    state.userDailyAdMetrics = snap.docs.map((d) => normalizeUserDailyAdMetric(d.id, d.data()));
+  } catch (error) {
+    state.userDailyAdMetrics = [];
+    state.loadErrors.userDailyAdMetrics = formatCollectionLoadError(
+      config.collections.userDailyAdMetrics || "userDailyAdMetrics",
+      error,
+      "Daily ad deltas are unavailable until the rollup function is deployed and this collection is readable."
     );
   }
 }
@@ -526,6 +590,24 @@ function normalizeMetric(id, payload = {}) {
   };
 }
 
+function normalizeUserDailyAdMetric(id, payload = {}) {
+  return {
+    id,
+    uid: payload.uid || "",
+    date: parseDate(payload.date),
+    dateKey: payload.date || "",
+    lastUserUpdatedAt: parseDate(payload.lastUserUpdatedAt),
+    updatedAt: parseDate(payload.updatedAt),
+    lastSeenPlatform: normalizePlatform(payload.platform),
+    country: normalizeCountry(payload.country),
+    buildNumber: normalizeBuildNumber(payload.buildNumber),
+    segment: payload.segment || "beginner",
+    level: readNumber(payload.level),
+    powerUses: readNumber(payload.powerUses),
+    ads: normalizeUserAdStats(payload)
+  };
+}
+
 function computeEngagement(level, powerUses) {
   return Math.round((level * 2.5) + (powerUses * 0.6));
 }
@@ -604,6 +686,17 @@ function normalizeUserAdStats(payload = {}) {
     rewardedNoRewardCloseRate: rewardedStarts > 0 ? rewardedNoRewardCloseCount / rewardedStarts : 0,
     interruptedRate: totalAdCompletionsOrCloses > 0 ? totalInterruptedCount / totalAdCompletionsOrCloses : 0
   };
+}
+
+function hasMissingPaidEvent(source = {}) {
+  const ads = source.ads || source;
+  return readNumber(ads.totalWatchCount) > 0 && readNumber(ads.totalPaidImpressions) === 0;
+}
+
+function computeEcpm(ads = {}) {
+  const paidImpressions = readNumber(ads.totalPaidImpressions);
+  if (paidImpressions <= 0) return 0;
+  return (readNumber(ads.totalRevenue) / paidImpressions) * 1000;
 }
 
 function microsToRevenue(value) {
@@ -721,6 +814,22 @@ function getMetricsInRange(bounds) {
   });
 }
 
+function getUserDailyAdMetricsInRange(bounds = getRangeBounds()) {
+  const p = els.platformFilter.value;
+  const c = els.countryFilter ? els.countryFilter.value : "all";
+  const b = els.buildFilter ? els.buildFilter.value : "all";
+  const seg = els.segmentFilter.value;
+  const segmentScoped = ["whale", "pro", "casual", "beginner"].includes(seg);
+  return state.userDailyAdMetrics.filter((m) => {
+    if (!isDateInRange(m.date, bounds)) return false;
+    if (p !== "all" && m.lastSeenPlatform !== p) return false;
+    if (c !== "all" && m.country !== c) return false;
+    if (b !== "all" && m.buildNumber !== b) return false;
+    if (segmentScoped && m.segment !== seg) return false;
+    return true;
+  });
+}
+
 function getMetricCountryCoverage(bounds) {
   const p = els.platformFilter.value;
   const relevant = state.metrics.filter((m) => {
@@ -781,6 +890,7 @@ function renderOverview(active, prevActive, scoped) {
   const prevRevBounds = getPreviousRangeBounds();
   const metricsCurrent = getMetricsInRange(revBounds);
   const metricsPrev = getMetricsInRange(prevRevBounds);
+  const dailyAdsCurrent = getUserDailyAdMetricsInRange(revBounds);
 
   const total = scoped.length;
   const activeCount = active.length;
@@ -807,7 +917,7 @@ function renderOverview(active, prevActive, scoped) {
     els.kpiRevenueCaption,
     (els.buildFilter && els.buildFilter.value !== "all") ? "Daily metrics, not build-scoped" : "Ad + IAP in window"
   );
-  renderAdOverview(active);
+  renderAdOverview(dailyAdsCurrent);
 
   const platformRows = buildPlatformRows(active);
   renderPlatformSummaryTable(platformRows);
@@ -880,7 +990,7 @@ function renderAdOverview(users) {
 function renderAdBreakdownTable(summary) {
   if (!els.adBreakdownBody) return;
   if (summary.userCount === 0) {
-    els.adBreakdownBody.innerHTML = `<tr><td colspan="7" class="table-empty">No active profiles in this range.</td></tr>`;
+    els.adBreakdownBody.innerHTML = `<tr><td colspan="7" class="table-empty">No daily ad deltas in this range yet.</td></tr>`;
     return;
   }
 
@@ -952,7 +1062,7 @@ function renderAdHealthList(summary) {
     {
       label: "Missing paid events",
       value: formatNumber(summary.paidImpressionMissingUsers),
-      detail: "Users with ad watches but no paid impression event",
+      detail: "User-days with ad watches but no paid impression event",
       tone: summary.paidImpressionMissingUsers > 0 ? "is-warning" : (summary.totalWatchCount > 0 ? "is-positive" : "is-neutral")
     }
   ];
@@ -1101,6 +1211,7 @@ function renderUsersTab(active, scoped) {
   renderPowerChart(active);
   renderRecencyChart(scoped);
   renderRetentionMatrix(scoped);
+  renderUserSortChips();
   renderTopPlayersTable();
 }
 
@@ -1171,49 +1282,126 @@ function renderTopPlayersTable() {
   setText(els.topPlayersTitle, mode.title);
   setText(els.topPlayersNote, `${mode.note} Filtered by the selected install-date window, platform, cohort, country, and build.`);
 
-  const sorted = [...users].sort((a, b) => {
-    if (state.topMode === "level") return b.level - a.level;
-    if (state.topMode === "powers") return b.powerUses - a.powerUses;
-    if (state.topMode === "adRevenue") return b.ads.totalRevenue - a.ads.totalRevenue;
-    if (state.topMode === "adExposure") return b.ads.totalWatchCount - a.ads.totalWatchCount;
-    return b.engagementScore - a.engagementScore;
-  }).slice(0, 30);
+  const columns = getUserTableColumns(state.userTableView);
+  if (els.topPlayersTableHead) {
+    els.topPlayersTableHead.innerHTML = `
+      <tr>${columns.map((column) => `<th class="${column.num ? "num" : ""}">${escapeHtml(column.label)}</th>`).join("")}</tr>
+    `;
+  }
+
+  const sorted = [...users].sort(compareUsersForTopMode).slice(0, 30);
 
   if (!sorted.length) {
-    els.topPlayersTableBody.innerHTML = `<tr><td colspan="16" class="table-empty">No players match this install-date filter.</td></tr>`;
+    els.topPlayersTableBody.innerHTML = `<tr><td colspan="${columns.length}" class="table-empty">No players match this install-date filter.</td></tr>`;
     return;
   }
 
   els.topPlayersTableBody.innerHTML = sorted.map((u) => `
     <tr>
-      <td>
-        <button
-          type="button"
-          class="copy-id-button"
-          data-copy-user-id="${escapeHtml(u.id)}"
-          title="Copy full user ID"
-          aria-label="Copy full user ID ${escapeHtml(truncateId(u.id))}"
-        >
-          <code>${escapeHtml(truncateId(u.id))}</code>
-        </button>
-      </td>
-      <td><span class="segment-pill ${u.segment}">${segmentLabel(u.segment)}</span></td>
-      <td><span class="platform-pill ${u.lastSeenPlatform}">${platformLabel(u.lastSeenPlatform)}</span></td>
-      <td><span class="country-cell" title="${escapeHtml(countryLabel(u.country))}">${countryFlag(u.country)} <strong>${escapeHtml(countryLabel(u.country))}</strong></span></td>
-      <td class="num">${u.buildNumber === "unknown" ? "—" : escapeHtml(u.buildNumber)}</td>
-      <td class="num">${formatNumber(u.level)}</td>
-      <td class="num">${formatNumber(u.hintCount)}</td>
-      <td class="num">${formatNumber(u.shuffleCount)}</td>
-      <td class="num">${formatNumber(u.undoCount)}</td>
-      <td class="num">${formatNumber(u.engagementScore)}</td>
-      <td class="num">${formatNumber(u.ads.totalWatchCount)}</td>
-      <td class="num">${formatNumber(u.ads.totalPaidImpressions)}</td>
-      <td class="num">${formatAdRevenue(u.ads.totalRevenue)}</td>
-      <td>${renderAdFlags(u)}</td>
-      <td>${formatDateTime(u.updatedAt)}</td>
-      <td>${formatDate(u.createdAt)}</td>
+      ${columns.map((column) => `<td class="${column.num ? "num" : ""}">${column.render(u)}</td>`).join("")}
     </tr>
   `).join("");
+}
+
+function renderUserSortChips() {
+  if (!els.topPlayersChips) return;
+  const sorts = USER_TABLE_SORTS[state.userTableView] || USER_TABLE_SORTS.players;
+  if (!sorts.some((sort) => sort.mode === state.topMode)) {
+    state.topMode = sorts[0].mode;
+  }
+  els.topPlayersChips.innerHTML = sorts.map((sort) => `
+    <button type="button" class="chip ${sort.mode === state.topMode ? "is-active" : ""}" data-top="${escapeHtml(sort.mode)}">${escapeHtml(sort.label)}</button>
+  `).join("");
+}
+
+function defaultTopModeForView(view) {
+  const sorts = USER_TABLE_SORTS[view] || USER_TABLE_SORTS.players;
+  return sorts[0].mode;
+}
+
+function compareUsersForTopMode(a, b) {
+  if (state.topMode === "level") return b.level - a.level;
+  if (state.topMode === "powers") return b.powerUses - a.powerUses;
+  if (state.topMode === "adRevenue") return b.ads.totalRevenue - a.ads.totalRevenue;
+  if (state.topMode === "paidEvents") return b.ads.totalPaidImpressions - a.ads.totalPaidImpressions;
+  if (state.topMode === "adExposure") return b.ads.totalWatchCount - a.ads.totalWatchCount;
+  if (state.topMode === "interruptions") return b.ads.totalInterruptedCount - a.ads.totalInterruptedCount;
+  if (state.topMode === "missingPaid") {
+    const missingDiff = Number(hasMissingPaidEvent(b)) - Number(hasMissingPaidEvent(a));
+    return missingDiff || (b.ads.totalWatchCount - a.ads.totalWatchCount);
+  }
+  if (state.topMode === "rewardDropOff") return b.ads.rewardedNoRewardCloseCount - a.ads.rewardedNoRewardCloseCount;
+  if (state.topMode === "recent") return compareDates(b.updatedAt, a.updatedAt);
+  return b.engagementScore - a.engagementScore;
+}
+
+function getUserTableColumns(view) {
+  const common = {
+    userId: { label: "User ID", render: renderUserIdCell },
+    segment: { label: "Segment", render: (u) => `<span class="segment-pill ${u.segment}">${segmentLabel(u.segment)}</span>` },
+    platform: { label: "Platform", render: (u) => `<span class="platform-pill ${u.lastSeenPlatform}">${platformLabel(u.lastSeenPlatform)}</span>` },
+    country: { label: "Country", render: (u) => `<span class="country-cell" title="${escapeHtml(countryLabel(u.country))}">${countryFlag(u.country)} <strong>${escapeHtml(countryLabel(u.country))}</strong></span>` },
+    build: { label: "Build", num: true, render: (u) => u.buildNumber === "unknown" ? "—" : escapeHtml(u.buildNumber) },
+    level: { label: "Level", num: true, render: (u) => formatNumber(u.level) },
+    score: { label: "Score", num: true, render: (u) => formatNumber(u.engagementScore) },
+    lastActive: { label: "Last Active", render: (u) => formatDateTime(u.updatedAt) },
+    installDate: { label: "Install Date", render: (u) => formatDate(u.createdAt) }
+  };
+
+  if (view === "monetization") {
+    return [
+      common.userId, common.platform, common.country, common.build,
+      { label: "Ad Revenue", num: true, render: (u) => formatAdRevenue(u.ads.totalRevenue) },
+      { label: "Paid Events", num: true, render: (u) => formatNumber(u.ads.totalPaidImpressions) },
+      { label: "Ad Watches", num: true, render: (u) => formatNumber(u.ads.totalWatchCount) },
+      { label: "eCPM", num: true, render: (u) => formatAdRevenue(computeEcpm(u.ads)) },
+      { label: "Flags", render: renderAdFlags },
+      common.lastActive
+    ];
+  }
+
+  if (view === "adHealth") {
+    return [
+      common.userId, common.build,
+      { label: "Interruptions", num: true, render: (u) => formatNumber(u.ads.totalInterruptedCount) },
+      { label: "Reward Drop-off", num: true, render: (u) => formatNumber(u.ads.rewardedNoRewardCloseCount) },
+      { label: "Short Closes", num: true, render: (u) => formatNumber(u.ads.interstitialShortCloseCount) },
+      { label: "Missing Paid", render: (u) => hasMissingPaidEvent(u) ? `<span class="ad-flag warning">Yes</span>` : `<span class="ad-flag-empty">—</span>` },
+      { label: "Avg Interstitial", num: true, render: (u) => u.ads.avgInterstitialVisibleSeconds > 0 ? `${formatDecimal(u.ads.avgInterstitialVisibleSeconds)}s` : "—" },
+      { label: "Avg Rewarded", num: true, render: (u) => u.ads.avgRewardedVisibleSeconds > 0 ? `${formatDecimal(u.ads.avgRewardedVisibleSeconds)}s` : "—" },
+      { label: "Flags", render: renderAdFlags },
+      common.lastActive
+    ];
+  }
+
+  if (view === "progression") {
+    return [
+      common.userId, common.segment, common.level,
+      { label: "Hints", num: true, render: (u) => formatNumber(u.hintCount) },
+      { label: "Shuffles", num: true, render: (u) => formatNumber(u.shuffleCount) },
+      { label: "Undos", num: true, render: (u) => formatNumber(u.undoCount) },
+      common.score, common.installDate, common.lastActive
+    ];
+  }
+
+  return [
+    common.userId, common.segment, common.platform, common.country, common.build,
+    common.level, common.score, common.lastActive
+  ];
+}
+
+function renderUserIdCell(user) {
+  return `
+    <button
+      type="button"
+      class="copy-id-button"
+      data-copy-user-id="${escapeHtml(user.id)}"
+      title="Copy full user ID"
+      aria-label="Copy full user ID ${escapeHtml(truncateId(user.id))}"
+    >
+      <code>${escapeHtml(truncateId(user.id))}</code>
+    </button>
+  `;
 }
 
 function getTopPlayersModeCopy(mode) {
@@ -1230,9 +1418,29 @@ function getTopPlayersModeCopy(mode) {
       title: "Highest ad revenue by install date",
       note: "Sorted by user ad revenue from RevenueMicros / 1,000,000."
     },
+    paidEvents: {
+      title: "Highest paid ad events by install date",
+      note: "Sorted by AdMob paid impression callbacks."
+    },
     adExposure: {
       title: "Highest ad exposure by install date",
       note: "Sorted by interstitial watches plus rewarded completions."
+    },
+    interruptions: {
+      title: "Most ad interruptions by install date",
+      note: "Sorted by unfinished ad sessions detected on the next app open."
+    },
+    missingPaid: {
+      title: "Missing paid-event users by install date",
+      note: "Shows users with ad watches but no paid impression callbacks first."
+    },
+    rewardDropOff: {
+      title: "Highest rewarded drop-off by install date",
+      note: "Sorted by rewarded ads closed before reward."
+    },
+    recent: {
+      title: "Recently active players by install date",
+      note: "Sorted by latest profile update."
     },
     engagement: {
       title: "Highest engagement by install date",
@@ -1247,7 +1455,7 @@ function renderAdFlags(user) {
   const flags = [];
   if (ads.totalRevenue > 0) flags.push({ label: "Revenue", tone: "success", title: "RevenueMicros is above zero" });
   if (ads.totalWatchCount >= 5) flags.push({ label: "High exposure", tone: "neutral", title: "Five or more completed/closed ad watches" });
-  if (ads.totalWatchCount > 0 && ads.totalPaidImpressions === 0) flags.push({ label: "No paid event", tone: "warning", title: "Ad watch exists but paid impression count is zero" });
+  if (hasMissingPaidEvent(ads)) flags.push({ label: "No paid event", tone: "warning", title: "Ad watch exists but paid impression count is zero" });
   if (ads.rewardedNoRewardCloseCount > 0) flags.push({ label: "Reward drop-off", tone: "warning", title: "Rewarded ad closed before reward" });
   if (ads.totalInterruptedCount > 0) flags.push({ label: "Interrupted", tone: "danger", title: "App resumed after an unfinished ad" });
   if (!flags.length) return `<span class="ad-flag-empty">—</span>`;
@@ -2181,7 +2389,7 @@ function buildAdSummary(users) {
     summary.rewardedNoRewardCloseCount += ads.rewardedNoRewardCloseCount;
     summary.interstitialInterruptedCount += ads.interstitialInterruptedCount;
     summary.rewardedInterruptedCount += ads.rewardedInterruptedCount;
-    if (ads.totalWatchCount > 0 && ads.totalPaidImpressions === 0) {
+    if (hasMissingPaidEvent(ads)) {
       summary.paidImpressionMissingUsers++;
     }
   });
@@ -2207,7 +2415,7 @@ function buildAdSummary(users) {
   summary.revenuePerPaidImpression = summary.totalPaidImpressions > 0
     ? summary.totalRevenue / summary.totalPaidImpressions
     : 0;
-  summary.ecpm = summary.revenuePerPaidImpression * 1000;
+  summary.ecpm = computeEcpm(summary);
 
   return summary;
 }
