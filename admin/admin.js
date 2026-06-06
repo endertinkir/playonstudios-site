@@ -453,7 +453,10 @@ function renderDashboardNotice() {
 
   els.dashboardNotice.hidden = false;
   els.dashboardNotice.textContent = notes.join(" ");
-  els.dashboardNotice.classList.toggle("is-error", Boolean(state.loadErrors.users || state.loadErrors.games || state.loadErrors.metrics));
+  els.dashboardNotice.classList.toggle(
+    "is-error",
+    Boolean(state.loadErrors.users || state.loadErrors.games || state.loadErrors.metrics || state.loadErrors.userDailyAdMetrics)
+  );
 }
 
 async function loadUsers() {
@@ -1430,35 +1433,35 @@ function getTopPlayersModeCopy(mode) {
   const copy = {
     level: {
       title: "Highest level by install date",
-      note: "Sorted by current level."
+      note: "Sorted by current user profile level."
     },
     powers: {
       title: "Highest power usage by install date",
-      note: "Sorted by hints, shuffles, and undos."
+      note: "Sorted by cumulative hints, shuffles, and undos on user profiles."
     },
     adRevenue: {
-      title: "Highest ad revenue by install date",
-      note: "Sorted by user ad revenue from RevenueMicros / 1,000,000."
+      title: "Highest lifetime ad revenue by install date",
+      note: "Sorted by cumulative user ad revenue from RevenueMicros / 1,000,000."
     },
     paidEvents: {
-      title: "Highest paid ad events by install date",
-      note: "Sorted by AdMob paid impression callbacks."
+      title: "Highest lifetime paid ad events by install date",
+      note: "Sorted by cumulative AdMob paid impression callbacks on user profiles."
     },
     adExposure: {
-      title: "Highest ad exposure by install date",
-      note: "Sorted by interstitial watches plus rewarded completions."
+      title: "Highest lifetime ad exposure by install date",
+      note: "Sorted by cumulative interstitial watches plus rewarded completions."
     },
     interruptions: {
-      title: "Most ad interruptions by install date",
-      note: "Sorted by unfinished ad sessions detected on the next app open."
+      title: "Most lifetime ad interruptions by install date",
+      note: "Sorted by cumulative unfinished ad sessions detected on the next app open."
     },
     missingPaid: {
       title: "Missing paid-event users by install date",
-      note: "Shows users with ad watches but no paid impression callbacks first."
+      note: "Shows cumulative user profiles with ad watches but no paid impression callbacks first."
     },
     rewardDropOff: {
-      title: "Highest rewarded drop-off by install date",
-      note: "Sorted by rewarded ads closed before reward."
+      title: "Highest lifetime rewarded drop-off by install date",
+      note: "Sorted by cumulative rewarded ads closed before reward."
     },
     recent: {
       title: "Recently active players by install date",
