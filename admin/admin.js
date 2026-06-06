@@ -9,7 +9,9 @@ import {
 import {
   collection,
   getDocs,
-  getFirestore
+  getFirestore,
+  query,
+  where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const config = PLAYON_ADMIN_CONFIG;
@@ -349,6 +351,21 @@ async function refreshAll() {
   }
 }
 
+async function refreshDailyAdMetricsForRange() {
+  if (!state.db || !state.user) {
+    renderDashboard();
+    return;
+  }
+  els.refreshButton.classList.add("is-loading");
+  try {
+    await loadUserDailyAdMetrics();
+    renderDashboard();
+    els.dataFreshness.textContent = `Daily ads synced ${formatDateTime(new Date())}`;
+  } finally {
+    els.refreshButton.classList.remove("is-loading");
+  }
+}
+
 function populateCountryOptions() {
   if (!els.countryFilter) return;
   const previous = els.countryFilter.value || "all";
@@ -494,7 +511,12 @@ async function loadUserDailyAdMetrics() {
   state.loadErrors.userDailyAdMetrics = null;
   try {
     const name = config.collections.userDailyAdMetrics || "userDailyAdMetrics";
-    const snap = await getDocs(collection(state.db, name));
+    const bounds = getRangeBounds();
+    const snap = await getDocs(query(
+      collection(state.db, name),
+      where("date", ">=", toIsoDate(bounds.start)),
+      where("date", "<=", toIsoDate(bounds.end))
+    ));
     state.userDailyAdMetrics = snap.docs.map((d) => normalizeUserDailyAdMetric(d.id, d.data()));
   } catch (error) {
     state.userDailyAdMetrics = [];
@@ -2481,12 +2503,12 @@ function daysInRange(bounds) {
 
 function handlePresetChange() {
   setDateRangeFromPreset(Number(els.rangePreset.value));
-  renderDashboard();
+  refreshDailyAdMetricsForRange().catch(handleDashboardError);
 }
 
 function handleManualRangeChange() {
   els.rangePreset.value = "";
-  renderDashboard();
+  refreshDailyAdMetricsForRange().catch(handleDashboardError);
 }
 
 function setDateRangeFromPreset(days) {
