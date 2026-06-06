@@ -8,6 +8,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   collection,
+  doc,
+  getDoc,
   getDocs,
   getFirestore,
   query,
@@ -97,6 +99,8 @@ const state = {
   games: [],
   metrics: [],
   userDailyAdMetrics: [],
+  selectedUserId: null,
+  selectedUser: null,
   loadErrors: {
     users: null,
     games: null,
@@ -131,7 +135,9 @@ function cacheEls() {
     "authScreen", "configBanner", "sessionBadge", "sessionBadgeLabel",
     "logoutButton", "loginPanel", "appPanel", "loginForm",
     "loginButton", "loginEmail", "loginPassword", "authFeedback",
-    "rangePreset", "rangeStart", "rangeEnd", "platformFilter", "segmentFilter", "countryFilter", "buildFilter",
+    "rangePreset", "rangeStart", "rangeEnd",
+    "installCohortPreset", "installStart", "installEnd",
+    "platformFilter", "segmentFilter", "countryFilter", "buildFilter",
     "refreshButton", "dataFreshness", "dashboardNotice", "filterContext",
     // Overview KPIs
     "kpiTotalProfiles", "kpiTotalProfilesDelta",
@@ -150,6 +156,7 @@ function cacheEls() {
     "segCasual", "segCasualBar",
     "segBeginner", "segBeginnerBar",
     "segChurn", "segChurnBar",
+    "userLookupInput", "userLookupButton", "userLookupFeedback", "userLookupResults", "userDetailBody",
     "userViewChips", "topPlayersChips", "topPlayersTableHead", "topPlayersTableBody", "topPlayersTitle", "topPlayersNote",
     // Levels
     "kpiLvlAvg", "kpiLvlMedian", "kpiLvlP75", "kpiLvlMax",
@@ -172,6 +179,9 @@ function wireEvents() {
   els.rangePreset.addEventListener("change", handlePresetChange);
   els.rangeStart.addEventListener("change", handleManualRangeChange);
   els.rangeEnd.addEventListener("change", handleManualRangeChange);
+  if (els.installCohortPreset) els.installCohortPreset.addEventListener("change", handleInstallCohortPresetChange);
+  if (els.installStart) els.installStart.addEventListener("change", handleInstallCohortManualRangeChange);
+  if (els.installEnd) els.installEnd.addEventListener("change", handleInstallCohortManualRangeChange);
   els.platformFilter.addEventListener("change", renderDashboard);
   els.segmentFilter.addEventListener("change", renderDashboard);
   if (els.countryFilter) els.countryFilter.addEventListener("change", renderDashboard);
@@ -201,6 +211,23 @@ function wireEvents() {
   }
   if (els.topPlayersTableBody) {
     els.topPlayersTableBody.addEventListener("click", handleTopPlayersTableClick);
+  }
+  if (els.userDetailBody) {
+    els.userDetailBody.addEventListener("click", handleTopPlayersTableClick);
+  }
+  if (els.userLookupButton) {
+    els.userLookupButton.addEventListener("click", () => handleUserLookupSubmit().catch(handleDashboardError));
+  }
+  if (els.userLookupInput) {
+    els.userLookupInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        handleUserLookupSubmit().catch(handleDashboardError);
+      }
+    });
+  }
+  if (els.userLookupResults) {
+    els.userLookupResults.addEventListener("click", handleUserLookupResultClick);
   }
   document.querySelectorAll("#levelFunnelChips .chip").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -254,6 +281,7 @@ function switchTab(tab) {
 
 function initializeDefaults() {
   setDateRangeFromPreset(Number(els.rangePreset.value));
+  syncInstallCohortControls();
 }
 
 function initializeFirebase() {
@@ -431,6 +459,9 @@ function renderDashboardNotice() {
   if (["active30m", "active7", "churnrisk"].includes(segment) && state.userDailyAdMetrics.length > 0) {
     notes.push("Daily ad rollups use stored player segments, so activity/churn cohort filters apply only to user profile sections.");
   }
+  if (els.installCohortPreset && els.installCohortPreset.value !== "all" && state.userDailyAdMetrics.length > 0) {
+    notes.push("Daily ad metrics are filtered by event date first, then by the selected install cohort.");
+  }
 
   const country = els.countryFilter ? els.countryFilter.value : "all";
   if (!state.loadErrors.metrics && country !== "all") {
@@ -580,6 +611,20 @@ function normalizeUser(id, payload = {}) {
     countryTrust,
     updatedAt: parseDate(payload.updatedAt),
     createdAt: parseDate(payload.createdAt) || parseDate(payload.firstSeenAt) || parseDate(payload.installDate),
+    lastOpenAt: parseDate(payload.lastOpenAt),
+    lastSessionEndedAt: parseDate(payload.lastSessionEndedAt),
+    revenueCatPremiumObservedAt: parseDate(payload.revenueCatPremiumObservedAt),
+    installId: payload.installId || "",
+    deviceStableId: payload.deviceStableId || "",
+    deviceModelCode: payload.deviceModelCode || "",
+    osVersion: payload.osVersion || "",
+    isPhysicalDevice: payload.isPhysicalDevice,
+    timeZone: payload.timeZone || "",
+    sessionCount: readNumber(payload.sessionCount),
+    totalPlayTimeSeconds: readNumber(payload.totalPlayTimeSeconds),
+    lastSessionDurationSeconds: readNumber(payload.lastSessionDurationSeconds),
+    revenueCatPremiumObserved: Boolean(payload.revenueCatPremiumObserved),
+    revenueCatPremiumObservedSource: payload.revenueCatPremiumObservedSource || "",
     powerUses,
     ads,
     engagementScore: computeEngagement(level, powerUses),
@@ -623,6 +668,7 @@ function normalizeUserDailyAdMetric(id, payload = {}) {
     dateKey: payload.date || "",
     lastUserUpdatedAt: parseDate(payload.lastUserUpdatedAt),
     updatedAt: parseDate(payload.updatedAt),
+    installDate: parseDate(payload.installDateKey || payload.installDate),
     lastSeenPlatform: normalizePlatform(payload.platform),
     country: normalizeCountry(payload.country),
     buildNumber: normalizeBuildNumber(payload.buildNumber),
@@ -752,11 +798,63 @@ function countryLabel(code) {
   return COUNTRY_NAMES[code] || code;
 }
 
+function getUserById(userId) {
+  if (!userId) return null;
+  return state.users.find((u) => u.id === userId) || null;
+}
+
 // ====== Range helpers ======
 function getRangeBounds() {
   const start = new Date(`${els.rangeStart.value}T00:00:00`);
   const end = new Date(`${els.rangeEnd.value}T23:59:59.999`);
   return { start, end };
+}
+
+function getInstallCohortBounds() {
+  if (!els.installCohortPreset) return null;
+  const preset = els.installCohortPreset.value;
+  if (preset === "all") return null;
+  if (preset === "same") return getRangeBounds();
+  if (preset === "custom") {
+    if (!els.installStart.value || !els.installEnd.value) return null;
+    return {
+      start: new Date(`${els.installStart.value}T00:00:00`),
+      end: new Date(`${els.installEnd.value}T23:59:59.999`)
+    };
+  }
+  const days = Number(preset);
+  if (!Number.isFinite(days) || days <= 0) return null;
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - (days - 1));
+  start.setHours(0, 0, 0, 0);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+function syncInstallCohortControls() {
+  if (!els.installCohortPreset || !els.installStart || !els.installEnd) return;
+  const preset = els.installCohortPreset.value;
+  const custom = preset === "custom";
+  const bounds = getInstallCohortBounds();
+
+  els.installStart.disabled = !custom;
+  els.installEnd.disabled = !custom;
+
+  if (preset === "all") {
+    els.installStart.value = "";
+    els.installEnd.value = "";
+    return;
+  }
+
+  if (bounds && !custom) {
+    els.installStart.value = toIsoDate(bounds.start);
+    els.installEnd.value = toIsoDate(bounds.end);
+  } else if (custom && !els.installStart.value && !els.installEnd.value) {
+    const eventBounds = getRangeBounds();
+    els.installStart.value = toIsoDate(eventBounds.start);
+    els.installEnd.value = toIsoDate(eventBounds.end);
+  }
 }
 
 function getPreviousRangeBounds() {
@@ -800,8 +898,18 @@ function applySegmentFilter(users, referenceTime = Date.now()) {
   return users.filter((u) => u.segment === seg);
 }
 
-function getScopedUsers(referenceTime = Date.now()) {
+function getProfileFilteredUsers(referenceTime = Date.now()) {
   return applySegmentFilter(getUsersForPlatform(), referenceTime);
+}
+
+function applyInstallCohortFilter(users) {
+  const bounds = getInstallCohortBounds();
+  if (!bounds) return users;
+  return users.filter((u) => isDateInRange(u.createdAt, bounds));
+}
+
+function getScopedUsers(referenceTime = Date.now()) {
+  return applyInstallCohortFilter(getProfileFilteredUsers(referenceTime));
 }
 
 function getActiveUsers(bounds = getRangeBounds()) {
@@ -813,7 +921,7 @@ function getPreviousActiveUsers() {
 }
 
 function getInstalledUsers(bounds = getRangeBounds()) {
-  return getScopedUsers().filter((u) => isDateInRange(u.createdAt, bounds));
+  return getProfileFilteredUsers().filter((u) => isDateInRange(u.createdAt, bounds));
 }
 
 function getDownloadUsers(bounds = getRangeBounds()) {
@@ -847,12 +955,21 @@ function getUserDailyAdMetricsInRange(bounds = getRangeBounds()) {
   const segmentScoped = ["whale", "pro", "casual", "beginner"].includes(seg);
   return state.userDailyAdMetrics.filter((m) => {
     if (!isDateInRange(m.date, bounds)) return false;
+    if (!isMetricInInstallCohort(m)) return false;
     if (p !== "all" && m.lastSeenPlatform !== p) return false;
     if (c !== "all" && m.country !== c) return false;
     if (b !== "all" && m.buildNumber !== b) return false;
     if (segmentScoped && m.segment !== seg) return false;
     return true;
   });
+}
+
+function isMetricInInstallCohort(metric) {
+  const bounds = getInstallCohortBounds();
+  if (!bounds) return true;
+  const user = getUserById(metric.uid);
+  const installDate = user?.createdAt || metric.installDate;
+  return isDateInRange(installDate, bounds);
 }
 
 function getMetricCountryCoverage(bounds) {
@@ -886,15 +1003,17 @@ function renderFilterContext(active, scoped) {
   if (!els.filterContext) return;
   const bounds = getRangeBounds();
   const installed = getInstalledUsers(bounds);
+  const installBounds = getInstallCohortBounds();
   const build = els.buildFilter ? els.buildFilter.value : "all";
   const platform = els.platformFilter.value;
   const country = els.countryFilter ? els.countryFilter.value : "all";
   const segment = els.segmentFilter.value;
   const chips = [
-    { label: "Range", value: formatRangeLabel(bounds) },
+    { label: "Event window", value: formatRangeLabel(bounds) },
+    { label: "Install cohort", value: installBounds ? formatRangeLabel(installBounds) : "All installs" },
     { label: "Scoped profiles", value: formatNumber(scoped.length) },
-    { label: "Active in range", value: formatNumber(active.length) },
-    { label: "Installs in range", value: formatNumber(installed.length) },
+    { label: "Active events", value: formatNumber(active.length) },
+    { label: "Installs in event", value: formatNumber(installed.length) },
     { label: "Platform", value: platform === "all" ? "All" : platformLabel(platform) },
     { label: "Country", value: country === "all" ? "All" : countryLabel(country) },
     { label: "Build", value: build === "all" ? "All" : (build === "unknown" ? "Unknown" : build) },
@@ -1236,13 +1355,215 @@ function renderUsersTab(active, scoped) {
   renderPowerChart(active);
   renderRecencyChart(scoped);
   renderRetentionMatrix(scoped);
+  renderSelectedUserDetail();
   renderUserSortChips();
   renderTopPlayersTable();
 }
 
+async function handleUserLookupSubmit() {
+  if (!els.userLookupInput) return;
+  const queryText = normalizeLookupText(els.userLookupInput.value);
+  if (!queryText) {
+    state.selectedUserId = null;
+    state.selectedUser = null;
+    renderUserLookupFeedback("Enter a full or partial Firebase user ID.", false);
+    renderSelectedUserDetail();
+    return;
+  }
+
+  const localMatches = findUsersByLookup(queryText);
+  const exactLocal = localMatches.find((u) => u.id.toLowerCase() === queryText.toLowerCase());
+  if (exactLocal) {
+    selectUserDetail(exactLocal, "Loaded from current user snapshot.");
+    return;
+  }
+
+  if (localMatches.length === 1) {
+    selectUserDetail(localMatches[0], "Matched one loaded user.");
+    return;
+  }
+
+  if (localMatches.length > 1) {
+    renderUserLookupMatches(localMatches, queryText);
+    renderUserLookupFeedback(`${formatNumber(localMatches.length)} loaded users match. Pick one below.`, false);
+    return;
+  }
+
+  if (queryText.length < 12) {
+    renderUserLookupFeedback("No loaded user matched. Paste the full user ID to fetch one exact document.", true);
+    return;
+  }
+
+  const fetched = await fetchUserById(queryText);
+  if (fetched) {
+    selectUserDetail(fetched, "Fetched exact user document from Firestore.");
+  } else {
+    renderUserLookupFeedback("No user document found for that exact ID.", true);
+  }
+}
+
+function handleUserLookupResultClick(event) {
+  const button = event.target.closest("[data-user-detail-id]");
+  if (!button) return;
+  const user = getUserById(button.dataset.userDetailId);
+  if (!user) return;
+  if (els.userLookupInput) els.userLookupInput.value = user.id;
+  selectUserDetail(user, "Loaded from current user snapshot.");
+}
+
+async function fetchUserById(userId) {
+  const usersCollection = config.collections.users || "users";
+  const snapshot = await getDoc(doc(state.db, usersCollection, userId));
+  if (!snapshot.exists()) return null;
+  return normalizeUser(snapshot.id, snapshot.data());
+}
+
+function selectUserDetail(user, message) {
+  state.selectedUserId = user.id;
+  state.selectedUser = user;
+  renderUserLookupMatches([], "");
+  renderUserLookupFeedback(message, false);
+  renderSelectedUserDetail();
+}
+
+function renderSelectedUserDetail() {
+  if (!els.userDetailBody) return;
+  if (!state.selectedUserId) {
+    els.userDetailBody.className = "user-detail-body user-detail-empty";
+    els.userDetailBody.textContent = "No user selected.";
+    return;
+  }
+  const user = getUserById(state.selectedUserId) || state.selectedUser;
+  if (!user) {
+    els.userDetailBody.className = "user-detail-body user-detail-empty";
+    els.userDetailBody.textContent = "Selected user is not available in the current snapshot.";
+    return;
+  }
+
+  const dailyRows = getUserDailyAdMetricsInRange(getRangeBounds()).filter((m) => m.uid === user.id);
+  const dailySummary = buildAdSummary(dailyRows);
+  const lifetimeAds = user.ads || normalizeUserAdStats();
+  els.userDetailBody.className = "user-detail-body";
+  els.userDetailBody.innerHTML = `
+    <div class="user-detail-header">
+      <div>
+        <span class="section-kicker">Selected User</span>
+        <strong>${escapeHtml(truncateId(user.id))}</strong>
+      </div>
+      <button type="button" class="copy-id-button user-detail-copy" data-copy-user-id="${escapeHtml(user.id)}" title="Copy full user ID">
+        <code>${escapeHtml(user.id)}</code>
+      </button>
+    </div>
+    <div class="user-detail-grid">
+      ${renderUserDetailSection("Profile", [
+        ["Segment", segmentLabel(user.segment)],
+        ["Platform", platformLabel(user.lastSeenPlatform)],
+        ["Country", countryLabel(user.country)],
+        ["Build", user.buildNumber === "unknown" ? "Unknown" : user.buildNumber],
+        ["Level", formatNumber(user.level)],
+        ["Score", formatNumber(user.engagementScore)],
+        ["Install date", formatDateTime(user.createdAt)],
+        ["Last active", formatDateTime(user.updatedAt)]
+      ])}
+      ${renderUserDetailSection("Device & Session", [
+        ["Device", user.deviceModelCode || "Unknown"],
+        ["OS", user.osVersion || "Unknown"],
+        ["Physical", formatBoolean(user.isPhysicalDevice)],
+        ["Time zone", user.timeZone || "Unknown"],
+        ["Sessions", formatNumber(user.sessionCount)],
+        ["Total playtime", formatDuration(user.totalPlayTimeSeconds)],
+        ["Last session", formatDuration(user.lastSessionDurationSeconds)],
+        ["Last open", formatDateTime(user.lastOpenAt)]
+      ])}
+      ${renderUserDetailSection("Lifetime Ads", [
+        ["Ad revenue", formatAdRevenue(lifetimeAds.totalRevenue)],
+        ["Paid events", formatNumber(lifetimeAds.totalPaidImpressions)],
+        ["Ad watches", formatNumber(lifetimeAds.totalWatchCount)],
+        ["Interruptions", formatNumber(lifetimeAds.totalInterruptedCount)],
+        ["Reward drop-off", formatNumber(lifetimeAds.rewardedNoRewardCloseCount)],
+        ["eCPM", lifetimeAds.totalPaidImpressions > 0 ? formatAdRevenue(computeEcpm(lifetimeAds)) : "—"],
+        ["Premium observed", user.revenueCatPremiumObserved ? "Yes" : "No"],
+        ["Premium source", user.revenueCatPremiumObservedSource || "None"]
+      ])}
+      ${renderUserDetailSection("Event Window Ads", [
+        ["Daily rows", formatNumber(dailyRows.length)],
+        ["Ad revenue", formatAdRevenue(dailySummary.totalRevenue)],
+        ["Paid events", formatNumber(dailySummary.totalPaidImpressions)],
+        ["Ad watches", formatNumber(dailySummary.totalWatchCount)],
+        ["Interruptions", formatNumber(dailySummary.totalInterruptedCount)],
+        ["Reward drop-off", formatNumber(dailySummary.rewardedNoRewardCloseCount)],
+        ["Window eCPM", dailySummary.totalPaidImpressions > 0 ? formatAdRevenue(dailySummary.ecpm) : "—"],
+        ["Window", formatRangeLabel(getRangeBounds())]
+      ])}
+      ${renderUserDetailSection("Identifiers", [
+        ["User ID", user.id],
+        ["Install ID", user.installId || "Unknown"],
+        ["Stable device ID", user.deviceStableId || "Unknown"],
+        ["Schema", user.schemaVersion ? formatNumber(user.schemaVersion) : "Unknown"]
+      ])}
+    </div>
+  `;
+}
+
+function renderUserDetailSection(title, rows) {
+  return `
+    <section class="user-detail-section">
+      <h3>${escapeHtml(title)}</h3>
+      <dl>
+        ${rows.map(([label, value]) => `
+          <div>
+            <dt>${escapeHtml(label)}</dt>
+            <dd>${escapeHtml(value)}</dd>
+          </div>
+        `).join("")}
+      </dl>
+    </section>
+  `;
+}
+
+function renderUserLookupMatches(matches, queryText) {
+  if (!els.userLookupResults) return;
+  if (!matches.length) {
+    els.userLookupResults.innerHTML = "";
+    return;
+  }
+  els.userLookupResults.innerHTML = matches.slice(0, 8).map((user) => `
+    <button type="button" class="lookup-result-button" data-user-detail-id="${escapeHtml(user.id)}">
+      <code>${escapeHtml(truncateId(user.id))}</code>
+      <span>${escapeHtml(segmentLabel(user.segment))} · ${escapeHtml(platformLabel(user.lastSeenPlatform))} · ${escapeHtml(formatDate(user.createdAt))}</span>
+    </button>
+  `).join("");
+  if (matches.length > 8) {
+    els.userLookupResults.innerHTML += `<span class="lookup-overflow">${formatNumber(matches.length - 8)} more matches hidden. Narrow "${escapeHtml(queryText)}".</span>`;
+  }
+}
+
+function renderUserLookupFeedback(message, isError) {
+  if (!els.userLookupFeedback) return;
+  els.userLookupFeedback.textContent = message;
+  els.userLookupFeedback.classList.toggle("is-error", Boolean(isError));
+}
+
+function findUsersByLookup(queryText) {
+  const q = normalizeLookupText(queryText).toLowerCase();
+  if (!q) return [];
+  if (q.includes("...") || q.includes("…")) {
+    const [start, end] = q.replace("…", "...").split("...");
+    return state.users.filter((u) => {
+      const id = u.id.toLowerCase();
+      return (!start || id.startsWith(start)) && (!end || id.endsWith(end));
+    });
+  }
+  return state.users.filter((u) => u.id.toLowerCase().includes(q));
+}
+
+function normalizeLookupText(value) {
+  return String(value || "").trim();
+}
+
 function renderRetentionMatrix(users) {
   if (!els.retentionBody) return;
-  const matrix = buildCohortMatrix(users, getRangeBounds());
+  const matrix = buildCohortMatrix(users, getRetentionInstallBounds(users));
   const haveCreatedAtRatio = matrix.totalUsers > 0 ? matrix.withCreatedAt / matrix.totalUsers : 0;
 
   if (els.retentionNote) {
@@ -1251,7 +1572,7 @@ function renderRetentionMatrix(users) {
       els.retentionNote.hidden = false;
     } else {
       const notes = [
-        "Uses the selected install-date window and the latest updatedAt timestamp only. Cells show the share of each cohort still seen on or after D1 / D3 / D7 / D14 / D30 — rolling retention, not exact same-day retention."
+        "Uses the selected install cohort and the latest updatedAt timestamp only. Cells show the share of each cohort still seen on or after D1 / D3 / D7 / D14 / D30 — rolling retention, not exact same-day retention."
       ];
       if (haveCreatedAtRatio < 0.6) {
         notes.push(`Only ${Math.round(haveCreatedAtRatio * 100)}% of profiles carry an install date, so these cohorts are based on that subset.`);
@@ -1271,6 +1592,17 @@ function renderRetentionMatrix(users) {
     ...matrix.rows.map(renderRetentionRow),
     renderRetentionRow(matrix.overall, "retention-overall")
   ].join("");
+}
+
+function getRetentionInstallBounds(users) {
+  const explicitBounds = getInstallCohortBounds();
+  if (explicitBounds) return explicitBounds;
+  const installs = users
+    .map((u) => u.createdAt)
+    .filter((date) => date && !Number.isNaN(date.getTime()))
+    .sort(compareDates);
+  if (!installs.length) return getRangeBounds();
+  return { start: installs[0], end: installs[installs.length - 1] };
 }
 
 function renderRetentionRow(row, className = "") {
@@ -1302,10 +1634,10 @@ function retentionCell(metric) {
 }
 
 function renderTopPlayersTable() {
-  const users = getInstalledUsers();
+  const users = getScopedUsers();
   const mode = getTopPlayersModeCopy(state.topMode);
   setText(els.topPlayersTitle, mode.title);
-  setText(els.topPlayersNote, `${mode.note} Filtered by the selected install-date window, platform, cohort, country, and build.`);
+  setText(els.topPlayersNote, `${mode.note} Filtered by the selected install cohort, profile cohort, platform, country, and build.`);
 
   const columns = getUserTableColumns(state.userTableView);
   if (els.topPlayersTableHead) {
@@ -1317,7 +1649,7 @@ function renderTopPlayersTable() {
   const sorted = [...users].sort(compareUsersForTopMode).slice(0, 30);
 
   if (!sorted.length) {
-    els.topPlayersTableBody.innerHTML = `<tr><td colspan="${columns.length}" class="table-empty">No players match this install-date filter.</td></tr>`;
+    els.topPlayersTableBody.innerHTML = `<tr><td colspan="${columns.length}" class="table-empty">No players match this install cohort filter.</td></tr>`;
     return;
   }
 
@@ -2506,12 +2838,25 @@ function daysInRange(bounds) {
 
 function handlePresetChange() {
   setDateRangeFromPreset(Number(els.rangePreset.value));
+  syncInstallCohortControls();
   refreshDailyAdMetricsForRange().catch(handleDashboardError);
 }
 
 function handleManualRangeChange() {
   els.rangePreset.value = "";
+  syncInstallCohortControls();
   refreshDailyAdMetricsForRange().catch(handleDashboardError);
+}
+
+function handleInstallCohortPresetChange() {
+  syncInstallCohortControls();
+  renderDashboard();
+}
+
+function handleInstallCohortManualRangeChange() {
+  if (els.installCohortPreset) els.installCohortPreset.value = "custom";
+  syncInstallCohortControls();
+  renderDashboard();
 }
 
 function setDateRangeFromPreset(days) {
@@ -2615,6 +2960,23 @@ function formatDecimal(v) {
 function formatPercent(ratio) {
   const pct = (Number(ratio) || 0) * 100;
   return `${pct.toFixed(pct >= 10 ? 0 : 1)}%`;
+}
+
+function formatBoolean(value) {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return "Unknown";
+}
+
+function formatDuration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  if (!total) return "0s";
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${secs}s`;
+  return `${secs}s`;
 }
 
 function formatCurrency(v) {

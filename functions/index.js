@@ -49,6 +49,7 @@ exports.rollupUserDailyAdMetrics = onDocumentWritten(
       after.lastSeenCountry
     );
     const buildNumber = normalizeBuildNumber(after.buildNumber);
+    const installDateKey = dateKeyForUserInstall(after);
     const segment = computeSegment(readNumber(after.level), readNumber(after.hintCount) + readNumber(after.shuffleCount) + readNumber(after.undoCount));
     const docId = [
       eventDate,
@@ -83,6 +84,7 @@ exports.rollupUserDailyAdMetrics = onDocumentWritten(
         platform,
         country,
         buildNumber,
+        installDateKey,
         segment,
         level: readNumber(after.level),
         powerUses: readNumber(after.hintCount) + readNumber(after.shuffleCount) + readNumber(after.undoCount),
@@ -118,6 +120,18 @@ function buildPositiveDeltas(before, after) {
 
 function dateKeyForEvent(eventTime) {
   const date = eventTime ? new Date(eventTime) : new Date();
+  return dateKeyForDate(date);
+}
+
+function dateKeyForUserInstall(user) {
+  const installDate =
+    normalizeDate(user.createdAt) ||
+    normalizeDate(user.firstSeenAt) ||
+    normalizeDate(user.installDate);
+  return installDate ? dateKeyForDate(installDate) : null;
+}
+
+function dateKeyForDate(date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: DASHBOARD_TIME_ZONE,
     year: "numeric",
@@ -126,6 +140,17 @@ function dateKeyForEvent(eventTime) {
   }).formatToParts(date);
   const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${value.year}-${value.month}-${value.day}`;
+}
+
+function normalizeDate(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate();
+  if (value instanceof Date) return value;
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  return null;
 }
 
 function normalizeTimestamp(value) {

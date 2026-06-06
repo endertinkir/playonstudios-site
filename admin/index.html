@@ -35,7 +35,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/admin/admin.css?v=20260606-daily-ad-rollups" />
+  <link rel="stylesheet" href="/admin/admin.css?v=20260606-event-cohorts" />
   <!--
     SRI: the `integrity` attribute is intentionally omitted because the hash must be
     generated locally from the exact bytes your CDN serves. Generate with:
@@ -50,7 +50,7 @@
     referrerpolicy="no-referrer"
     defer
   ></script>
-  <script type="module" src="/admin/admin.js?v=20260606-daily-ad-range"></script>
+  <script type="module" src="/admin/admin.js?v=20260606-event-cohorts"></script>
 </head>
 <body class="page-admin">
   <div class="aurora" aria-hidden="true">
@@ -135,7 +135,7 @@
 
           <div class="filter-grid">
             <label class="field">
-              <span>Quick range</span>
+              <span>Event window</span>
               <select id="rangePreset">
                 <option value="7">Last 7 days</option>
                 <option value="14">Last 14 days</option>
@@ -153,6 +153,28 @@
             <label class="field">
               <span>To</span>
               <input id="rangeEnd" type="date" />
+            </label>
+
+            <label class="field">
+              <span>Install cohort</span>
+              <select id="installCohortPreset">
+                <option value="all" selected>All installs</option>
+                <option value="same">Same as event window</option>
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Install from</span>
+              <input id="installStart" type="date" disabled />
+            </label>
+
+            <label class="field">
+              <span>Install to</span>
+              <input id="installEnd" type="date" disabled />
             </label>
 
             <label class="field">
@@ -198,7 +220,7 @@
             </button>
           </div>
 
-          <p class="panel-feedback">Source: <code>users</code> + <code>studioDailyMetrics</code>. User analytics use profile counters; Marketing uses daily metric rows.</p>
+          <p class="panel-feedback">Source: <code>users</code> + <code>studioDailyMetrics</code> + <code>userDailyAdMetrics</code>. Event window filters activity and daily ad deltas; install cohort decides which users are included.</p>
           <div class="scope-strip" id="filterContext" aria-live="polite"></div>
           <p class="panel-feedback" id="dashboardNotice" hidden></p>
         </section>
@@ -513,6 +535,28 @@
 
         <!-- ==================== USERS TAB ==================== -->
         <section class="tab-pane" data-pane="users" role="tabpanel" hidden>
+          <section class="admin-grid">
+            <article class="panel table-panel chart-span-3">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">User Lookup</p>
+                  <h2>Search by user ID</h2>
+                </div>
+                <div class="panel-meta">Exact ID = one Firestore read if not loaded</div>
+              </div>
+              <div class="user-lookup-row">
+                <label class="field user-lookup-field">
+                  <span>User ID</span>
+                  <input id="userLookupInput" type="search" autocomplete="off" spellcheck="false" placeholder="Paste full Firebase user ID" />
+                </label>
+                <button class="button button-secondary user-lookup-action" id="userLookupButton" type="button">Search</button>
+              </div>
+              <p class="panel-feedback" id="userLookupFeedback">Search loaded users by full or partial ID. Exact IDs can be fetched directly if they are not in the current snapshot.</p>
+              <div class="lookup-results" id="userLookupResults"></div>
+              <div class="user-detail-body user-detail-empty" id="userDetailBody">No user selected.</div>
+            </article>
+          </section>
+
           <section class="segment-grid">
             <article class="panel segment-card segment-whale">
               <span class="segment-icon">👑</span>
@@ -629,7 +673,7 @@
                   <tbody id="topPlayersTableBody"></tbody>
                 </table>
               </div>
-              <p class="panel-feedback" id="topPlayersNote">Filtered by the selected install-date window, platform, cohort, country, and build.</p>
+              <p class="panel-feedback" id="topPlayersNote">Filtered by the selected install cohort, platform, cohort, country, and build.</p>
             </article>
           </section>
         </section>
