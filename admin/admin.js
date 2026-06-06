@@ -391,16 +391,16 @@ async function refreshAll() {
   }
 }
 
-async function refreshDailyAdMetricsForRange() {
+async function refreshWindowMetricsForRange() {
   if (!state.db || !state.user) {
     renderDashboard();
     return;
   }
   els.refreshButton.classList.add("is-loading");
   try {
-    await loadUserDailyAdMetrics();
+    await Promise.all([loadMetrics(), loadUserDailyAdMetrics()]);
     renderDashboard();
-    els.dataFreshness.textContent = `Daily ads synced ${formatDateTime(new Date())}`;
+    els.dataFreshness.textContent = `Window data synced ${formatDateTime(new Date())}`;
   } finally {
     els.refreshButton.classList.remove("is-loading");
   }
@@ -541,7 +541,12 @@ async function loadMetrics() {
   state.loadErrors.metrics = null;
   try {
     const name = config.collections.dailyMetrics || "studioDailyMetrics";
-    const snap = await getDocs(collection(state.db, name));
+    const bounds = getMetricsLoadBounds();
+    const snap = await getDocs(query(
+      collection(state.db, name),
+      where("date", ">=", toIsoDate(bounds.start)),
+      where("date", "<=", toIsoDate(bounds.end))
+    ));
     state.metrics = snap.docs.map((d) => normalizeMetric(d.id, d.data()));
   } catch (error) {
     state.metrics = [];
@@ -877,6 +882,15 @@ function getPreviousRangeBounds() {
   return { start: prevStart, end: prevEnd };
 }
 
+function getMetricsLoadBounds() {
+  const current = getRangeBounds();
+  const previous = getPreviousRangeBounds();
+  return {
+    start: minDate(current.start, previous.start),
+    end: maxDate(current.end, previous.end)
+  };
+}
+
 function isDateInRange(d, bounds) {
   if (!d || Number.isNaN(d.getTime())) return false;
   return d >= bounds.start && d <= bounds.end;
@@ -1081,7 +1095,7 @@ function renderOverview(active, prevActive, scoped) {
   renderTrendChart();
   renderPulseList(active, scoped, metricsCurrent, metricsPrev);
   renderTopCountriesTable(active);
-  renderBuildHealthTable(active);
+  renderBuildHealthTable(active, dailyAdsCurrent);
 }
 
 function renderTopCountriesTable(users) {
@@ -1112,9 +1126,9 @@ function renderTopCountriesTable(users) {
   `).join("");
 }
 
-function renderBuildHealthTable(users) {
+function renderBuildHealthTable(users, dailyAdRows = []) {
   if (!els.buildHealthBody) return;
-  const rows = buildBuildRows(users).slice(0, 8);
+  const rows = buildBuildRows(users, dailyAdRows).slice(0, 8);
   if (!rows.length) {
     els.buildHealthBody.innerHTML = `<tr><td colspan="6" class="table-empty">No active profiles in this range.</td></tr>`;
     return;
@@ -1286,8 +1300,10 @@ function renderPulseList(active, scoped, metricsCurrent, metricsPrev) {
   const revenue = sum(metricsCurrent.map((m) => m.revenue || (m.adRevenue + m.iapRevenue)));
   const spend = sum(metricsCurrent.map((m) => m.adSpend));
   const roas = spend > 0 ? revenue / spend : 0;
-  const avgDau = average(metricsCurrent.map((m) => m.dau));
-  const avgMau = average(metricsCurrent.map((m) => m.mau));
+  const dauByDay = groupSum(metricsCurrent, (m) => toIsoDate(m.date), (m) => m.dau);
+  const mauByDay = groupSum(metricsCurrent, (m) => toIsoDate(m.date), (m) => m.mau);
+  const avgDau = average(Array.from(dauByDay.values()));
+  const avgMau = average(Array.from(mauByDay.values()));
   const stickiness = avgMau > 0 ? (avgDau / avgMau) * 100 : 0;
 
   const items = [
@@ -2028,8 +2044,9 @@ function renderMarketingTab() {
   const roas = spend > 0 ? revenue / spend : 0;
   const prevRoas = prevSpend > 0 ? prevRev / prevSpend : 0;
   const cpi = downloads > 0 ? spend / downloads : 0;
-  const avgDau = average(current.map((m) => m.dau));
-  const arpdau = avgDau > 0 ? revenue / (avgDau * Math.max(1, daysInRange(bounds))) : 0;
+  const dauByDay = groupSum(current, (m) => toIsoDate(m.date), (m) => m.dau);
+  const dauDays = sum(Array.from(dauByDay.values()));
+  const arpdau = dauDays > 0 ? revenue / dauDays : 0;
 
   setKpi(els.mkRevenue, els.mkRevenueDelta, revenue, prevRev, "currency");
   setKpi(els.mkSpend, els.mkSpendDelta, spend, prevSpend, "currency");
@@ -2720,10 +2737,12 @@ function buildCountryRows(users) {
     .sort((a, b) => b.profiles - a.profiles);
 }
 
-function buildBuildRows(users) {
+function buildBuildRows(users, dailyAdRows = []) {
   const map = new Map();
+  const activeBuildByUserId = new Map();
   users.forEach((u) => {
     const key = u.buildNumber || "unknown";
+    activeBuildByUserId.set(u.id, key);
     const entry = map.get(key) || {
       build: key,
       profiles: 0,
@@ -2734,10 +2753,18 @@ function buildBuildRows(users) {
     };
     entry.profiles++;
     entry.levelSum += u.level;
-    entry.adRevenue += u.ads.totalRevenue;
-    entry.paidEvents += u.ads.totalPaidImpressions;
-    entry.interruptions += u.ads.totalInterruptedCount;
     map.set(key, entry);
+  });
+
+  dailyAdRows.forEach((metric) => {
+    if (!metric.uid || !activeBuildByUserId.has(metric.uid)) return;
+    const key = activeBuildByUserId.get(metric.uid) || metric.buildNumber || "unknown";
+    const entry = map.get(key);
+    if (!entry) return;
+    const ads = metric.ads || normalizeUserAdStats();
+    entry.adRevenue += ads.totalRevenue;
+    entry.paidEvents += ads.totalPaidImpressions;
+    entry.interruptions += ads.totalInterruptedCount;
   });
 
   return Array.from(map.values())
@@ -2903,20 +2930,16 @@ function iterateDays(start, end) {
   return days;
 }
 
-function daysInRange(bounds) {
-  return Math.max(1, Math.round((bounds.end.getTime() - bounds.start.getTime()) / 864e5));
-}
-
 function handlePresetChange() {
   setDateRangeFromPreset(Number(els.rangePreset.value));
   syncInstallCohortControls();
-  refreshDailyAdMetricsForRange().catch(handleDashboardError);
+  refreshWindowMetricsForRange().catch(handleDashboardError);
 }
 
 function handleManualRangeChange() {
   els.rangePreset.value = "";
   syncInstallCohortControls();
-  refreshDailyAdMetricsForRange().catch(handleDashboardError);
+  refreshWindowMetricsForRange().catch(handleDashboardError);
 }
 
 function handleInstallCohortPresetChange() {

@@ -35,7 +35,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/admin/admin.css?v=20260606-user-event-scope" />
+  <link rel="stylesheet" href="/admin/admin.css?v=20260606-dashboard-audit" />
   <!--
     SRI: the `integrity` attribute is intentionally omitted because the hash must be
     generated locally from the exact bytes your CDN serves. Generate with:
@@ -50,7 +50,7 @@
     referrerpolicy="no-referrer"
     defer
   ></script>
-  <script type="module" src="/admin/admin.js?v=20260606-user-event-scope"></script>
+  <script type="module" src="/admin/admin.js?v=20260606-dashboard-audit"></script>
 </head>
 <body class="page-admin">
   <div class="aurora" aria-hidden="true">
@@ -501,7 +501,7 @@
               <div class="panel-head">
                 <div>
                   <p class="section-kicker">Build Health</p>
-                  <h2>Active profiles by build</h2>
+                  <h2>Active profiles and event ad deltas by build</h2>
                 </div>
               </div>
               <div class="table-wrap">
@@ -511,7 +511,7 @@
                       <th>Build</th>
                       <th class="num">Active</th>
                       <th class="num">Avg Lvl</th>
-                      <th class="num">Ad Rev.</th>
+                      <th class="num">Daily Ad Rev.</th>
                       <th class="num">Paid Events</th>
                       <th class="num">Interrupts</th>
                     </tr>
@@ -519,6 +519,7 @@
                   <tbody id="buildHealthBody"></tbody>
                 </table>
               </div>
+              <p class="panel-feedback">Ad columns use selected event-window deltas for the active profiles in each build.</p>
             </article>
 
             <article class="panel insight-panel quick-pulse-panel chart-span-3">
@@ -834,7 +835,7 @@
               </div>
               <strong class="kpi-value" id="mkArpdau">$0</strong>
               <div class="kpi-foot">
-                <span class="kpi-caption">Revenue ÷ avg DAU</span>
+                <span class="kpi-caption">Revenue ÷ DAU-days</span>
               </div>
             </article>
           </section>
