@@ -35,7 +35,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/admin/admin.css?v=20260606-event-cohorts" />
+  <link rel="stylesheet" href="/admin/admin.css?v=20260606-user-event-scope" />
   <!--
     SRI: the `integrity` attribute is intentionally omitted because the hash must be
     generated locally from the exact bytes your CDN serves. Generate with:
@@ -50,7 +50,7 @@
     referrerpolicy="no-referrer"
     defer
   ></script>
-  <script type="module" src="/admin/admin.js?v=20260606-event-cohorts"></script>
+  <script type="module" src="/admin/admin.js?v=20260606-user-event-scope"></script>
 </head>
 <body class="page-admin">
   <div class="aurora" aria-hidden="true">
@@ -654,6 +654,10 @@
                   <h2 id="topPlayersTitle">Highest engagement by install date</h2>
                 </div>
                 <div class="table-control-stack">
+                  <div class="chip-group" id="userScopeChips" aria-label="User table scope">
+                    <button type="button" class="chip is-active" data-user-scope="event">Event-active</button>
+                    <button type="button" class="chip" data-user-scope="profile">All profiles</button>
+                  </div>
                   <div class="chip-group" id="userViewChips" aria-label="User table view">
                     <button type="button" class="chip is-active" data-user-view="players">Players</button>
                     <button type="button" class="chip" data-user-view="monetization">Monetization</button>
@@ -673,7 +677,7 @@
                   <tbody id="topPlayersTableBody"></tbody>
                 </table>
               </div>
-              <p class="panel-feedback" id="topPlayersNote">Filtered by the selected install cohort, platform, cohort, country, and build.</p>
+              <p class="panel-feedback" id="topPlayersNote">Event-active shows users seen in the selected event window. All profiles shows the selected install cohort.</p>
             </article>
           </section>
         </section>

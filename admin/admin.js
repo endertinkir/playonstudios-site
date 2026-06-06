@@ -110,6 +110,7 @@ const state = {
   charts: {},
   activeTab: "overview",
   trendMode: "users",
+  userTableScope: "event",
   userTableView: "players",
   topMode: "engagement",
   levelFunnelMode: "overall"
@@ -157,7 +158,7 @@ function cacheEls() {
     "segBeginner", "segBeginnerBar",
     "segChurn", "segChurnBar",
     "userLookupInput", "userLookupButton", "userLookupFeedback", "userLookupResults", "userDetailBody",
-    "userViewChips", "topPlayersChips", "topPlayersTableHead", "topPlayersTableBody", "topPlayersTitle", "topPlayersNote",
+    "userScopeChips", "userViewChips", "topPlayersChips", "topPlayersTableHead", "topPlayersTableBody", "topPlayersTitle", "topPlayersNote",
     // Levels
     "kpiLvlAvg", "kpiLvlMedian", "kpiLvlP75", "kpiLvlMax",
     "progressionFunnel", "levelCohortBody",
@@ -206,6 +207,9 @@ function wireEvents() {
   if (els.userViewChips) {
     els.userViewChips.addEventListener("click", handleUserViewChipClick);
   }
+  if (els.userScopeChips) {
+    els.userScopeChips.addEventListener("click", handleUserScopeChipClick);
+  }
   if (els.topPlayersChips) {
     els.topPlayersChips.addEventListener("click", handleTopPlayersSortChipClick);
   }
@@ -250,6 +254,14 @@ function handleUserViewChipClick(event) {
   state.topMode = defaultTopModeForView(state.userTableView);
   setActiveChip("#userViewChips", button);
   renderUserSortChips();
+  renderTopPlayersTable();
+}
+
+function handleUserScopeChipClick(event) {
+  const button = event.target.closest("[data-user-scope]");
+  if (!button) return;
+  state.userTableScope = button.dataset.userScope || "event";
+  setActiveChip("#userScopeChips", button);
   renderTopPlayersTable();
 }
 
@@ -1633,23 +1645,25 @@ function retentionCell(metric) {
   return `<span class="retention-chip" style="${style}" title="${escapeHtml(title)}">${label}</span>`;
 }
 
-function renderTopPlayersTable() {
-  const users = getScopedUsers();
-  const mode = getTopPlayersModeCopy(state.topMode);
+function renderTopPlayersTable(activeUsers = getActiveUsers(), scopedUsers = getScopedUsers()) {
+  const users = getUserTableScopeUsers(activeUsers, scopedUsers);
+  const rows = buildUserTableRows(users);
+  const mode = getTopPlayersModeCopy(state.topMode, state.userTableScope);
+  const scope = getUserTableScopeCopy(state.userTableScope);
   setText(els.topPlayersTitle, mode.title);
-  setText(els.topPlayersNote, `${mode.note} Filtered by the selected install cohort, profile cohort, platform, country, and build.`);
+  setText(els.topPlayersNote, `${mode.note} ${scope.note}`);
 
-  const columns = getUserTableColumns(state.userTableView);
+  const columns = getUserTableColumns(state.userTableView, state.userTableScope);
   if (els.topPlayersTableHead) {
     els.topPlayersTableHead.innerHTML = `
       <tr>${columns.map((column) => `<th class="${column.num ? "num" : ""}">${escapeHtml(column.label)}</th>`).join("")}</tr>
     `;
   }
 
-  const sorted = [...users].sort(compareUsersForTopMode).slice(0, 30);
+  const sorted = [...rows].sort(compareUsersForTopMode).slice(0, 30);
 
   if (!sorted.length) {
-    els.topPlayersTableBody.innerHTML = `<tr><td colspan="${columns.length}" class="table-empty">No players match this install cohort filter.</td></tr>`;
+    els.topPlayersTableBody.innerHTML = `<tr><td colspan="${columns.length}" class="table-empty">${escapeHtml(scope.empty)}</td></tr>`;
     return;
   }
 
@@ -1658,6 +1672,35 @@ function renderTopPlayersTable() {
       ${columns.map((column) => `<td class="${column.num ? "num" : ""}">${column.render(u)}</td>`).join("")}
     </tr>
   `).join("");
+}
+
+function getUserTableScopeUsers(activeUsers, scopedUsers) {
+  if (state.userTableScope === "profile") return scopedUsers;
+  return activeUsers;
+}
+
+function buildUserTableRows(users) {
+  if (state.userTableScope !== "event") return users;
+  const eventAdSummaries = buildUserEventAdSummaryMap();
+  return users.map((user) => ({
+    ...user,
+    ads: eventAdSummaries.get(user.id) || normalizeUserAdStats()
+  }));
+}
+
+function buildUserEventAdSummaryMap() {
+  const buckets = new Map();
+  getUserDailyAdMetricsInRange(getRangeBounds()).forEach((metric) => {
+    if (!metric.uid) return;
+    if (!buckets.has(metric.uid)) buckets.set(metric.uid, []);
+    buckets.get(metric.uid).push(metric);
+  });
+
+  const summaries = new Map();
+  buckets.forEach((rows, uid) => {
+    summaries.set(uid, buildAdSummary(rows));
+  });
+  return summaries;
 }
 
 function renderUserSortChips() {
@@ -1692,7 +1735,9 @@ function compareUsersForTopMode(a, b) {
   return b.engagementScore - a.engagementScore;
 }
 
-function getUserTableColumns(view) {
+function getUserTableColumns(view, scope = state.userTableScope) {
+  const eventScope = scope === "event";
+  const adLabelPrefix = eventScope ? "Event " : "Lifetime ";
   const common = {
     userId: { label: "User ID", render: renderUserIdCell },
     segment: { label: "Segment", render: (u) => `<span class="segment-pill ${u.segment}">${segmentLabel(u.segment)}</span>` },
@@ -1708,10 +1753,10 @@ function getUserTableColumns(view) {
   if (view === "monetization") {
     return [
       common.userId, common.platform, common.country, common.build,
-      { label: "Ad Revenue", num: true, render: (u) => formatAdRevenue(u.ads.totalRevenue) },
-      { label: "Paid Events", num: true, render: (u) => formatNumber(u.ads.totalPaidImpressions) },
-      { label: "Ad Watches", num: true, render: (u) => formatNumber(u.ads.totalWatchCount) },
-      { label: "eCPM", num: true, render: (u) => formatAdRevenue(computeEcpm(u.ads)) },
+      { label: `${adLabelPrefix}Ad Revenue`, num: true, render: (u) => formatAdRevenue(u.ads.totalRevenue) },
+      { label: `${adLabelPrefix}Paid Events`, num: true, render: (u) => formatNumber(u.ads.totalPaidImpressions) },
+      { label: `${adLabelPrefix}Ad Watches`, num: true, render: (u) => formatNumber(u.ads.totalWatchCount) },
+      { label: `${eventScope ? "Event" : "Lifetime"} eCPM`, num: true, render: (u) => formatAdRevenue(computeEcpm(u.ads)) },
       { label: "Flags", render: renderAdFlags },
       common.lastActive
     ];
@@ -1720,9 +1765,9 @@ function getUserTableColumns(view) {
   if (view === "adHealth") {
     return [
       common.userId, common.build,
-      { label: "Interruptions", num: true, render: (u) => formatNumber(u.ads.totalInterruptedCount) },
-      { label: "Reward Drop-off", num: true, render: (u) => formatNumber(u.ads.rewardedNoRewardCloseCount) },
-      { label: "Short Closes", num: true, render: (u) => formatNumber(u.ads.interstitialShortCloseCount) },
+      { label: `${adLabelPrefix}Interruptions`, num: true, render: (u) => formatNumber(u.ads.totalInterruptedCount) },
+      { label: `${adLabelPrefix}Reward Drop-off`, num: true, render: (u) => formatNumber(u.ads.rewardedNoRewardCloseCount) },
+      { label: `${adLabelPrefix}Short Closes`, num: true, render: (u) => formatNumber(u.ads.interstitialShortCloseCount) },
       { label: "Missing Paid", render: (u) => hasMissingPaidEvent(u) ? `<span class="ad-flag warning">Yes</span>` : `<span class="ad-flag-empty">—</span>` },
       { label: "Avg Interstitial", num: true, render: (u) => u.ads.avgInterstitialVisibleSeconds > 0 ? `${formatDecimal(u.ads.avgInterstitialVisibleSeconds)}s` : "—" },
       { label: "Avg Rewarded", num: true, render: (u) => u.ads.avgRewardedVisibleSeconds > 0 ? `${formatDecimal(u.ads.avgRewardedVisibleSeconds)}s` : "—" },
@@ -1761,50 +1806,76 @@ function renderUserIdCell(user) {
   `;
 }
 
-function getTopPlayersModeCopy(mode) {
+function getTopPlayersModeCopy(mode, scope = state.userTableScope) {
+  const eventScope = scope === "event";
   const copy = {
     level: {
-      title: "Highest level by install date",
+      title: eventScope ? "Highest level in event window" : "Highest level by install date",
       note: "Sorted by current user profile level."
     },
     powers: {
-      title: "Highest power usage by install date",
+      title: eventScope ? "Highest power usage in event window" : "Highest power usage by install date",
       note: "Sorted by cumulative hints, shuffles, and undos on user profiles."
     },
     adRevenue: {
-      title: "Highest lifetime ad revenue by install date",
-      note: "Sorted by cumulative user ad revenue from RevenueMicros / 1,000,000."
+      title: eventScope ? "Highest event-window ad revenue" : "Highest lifetime ad revenue by install date",
+      note: eventScope
+        ? "Sorted by daily ad revenue deltas from RevenueMicros / 1,000,000."
+        : "Sorted by cumulative user ad revenue from RevenueMicros / 1,000,000."
     },
     paidEvents: {
-      title: "Highest lifetime paid ad events by install date",
-      note: "Sorted by cumulative AdMob paid impression callbacks on user profiles."
+      title: eventScope ? "Highest event-window paid ad events" : "Highest lifetime paid ad events by install date",
+      note: eventScope
+        ? "Sorted by daily AdMob paid impression deltas."
+        : "Sorted by cumulative AdMob paid impression callbacks on user profiles."
     },
     adExposure: {
-      title: "Highest lifetime ad exposure by install date",
-      note: "Sorted by cumulative interstitial watches plus rewarded completions."
+      title: eventScope ? "Highest event-window ad exposure" : "Highest lifetime ad exposure by install date",
+      note: eventScope
+        ? "Sorted by daily interstitial watches plus rewarded completions."
+        : "Sorted by cumulative interstitial watches plus rewarded completions."
     },
     interruptions: {
-      title: "Most lifetime ad interruptions by install date",
-      note: "Sorted by cumulative unfinished ad sessions detected on the next app open."
+      title: eventScope ? "Most event-window ad interruptions" : "Most lifetime ad interruptions by install date",
+      note: eventScope
+        ? "Sorted by daily unfinished ad session deltas."
+        : "Sorted by cumulative unfinished ad sessions detected on the next app open."
     },
     missingPaid: {
-      title: "Missing paid-event users by install date",
-      note: "Shows cumulative user profiles with ad watches but no paid impression callbacks first."
+      title: eventScope ? "Event-window missing paid-event users" : "Missing paid-event users by install date",
+      note: eventScope
+        ? "Shows event-active users with ad watches but no paid impression callbacks in the selected window first."
+        : "Shows cumulative user profiles with ad watches but no paid impression callbacks first."
     },
     rewardDropOff: {
-      title: "Highest lifetime rewarded drop-off by install date",
-      note: "Sorted by cumulative rewarded ads closed before reward."
+      title: eventScope ? "Highest event-window rewarded drop-off" : "Highest lifetime rewarded drop-off by install date",
+      note: eventScope
+        ? "Sorted by daily rewarded ads closed before reward."
+        : "Sorted by cumulative rewarded ads closed before reward."
     },
     recent: {
-      title: "Recently active players by install date",
+      title: eventScope ? "Recently active players in event window" : "Recently active players by install date",
       note: "Sorted by latest profile update."
     },
     engagement: {
-      title: "Highest engagement by install date",
+      title: eventScope ? "Highest engagement in event window" : "Highest engagement by install date",
       note: "Sorted by weighted level and power usage."
     }
   };
   return copy[mode] || copy.engagement;
+}
+
+function getUserTableScopeCopy(scope = state.userTableScope) {
+  if (scope === "profile") {
+    return {
+      note: "All profiles shows loaded users matching the selected install cohort, profile cohort, platform, country, and build; ad columns use lifetime user fields.",
+      empty: "No players match this install cohort and profile filter set."
+    };
+  }
+  return {
+    note: "Event-active shows users whose latest profile update is inside the selected event window after install cohort, profile cohort, platform, country, and build filters; ad columns use event-window daily deltas.",
+    empty: "No players were active in this event window after the selected install cohort and profile filters."
+  };
 }
 
 function renderAdFlags(user) {
