@@ -496,3 +496,7 @@ media.net, 8CU675N41, RESELLER
 themediagrid.com, FALINO, RESELLER, 9fac4a4a87c2a44f
 e-planning.net, 6a7f877127485fdb, RESELLER, c1ba615865ed87b2
 insticator.com, cadff748-965f-4393-a76e-a8f902512bad, RESELLER, b3511ffcafb23a32
+pubmatic.com, 165329, RESELLER, 5d62403b186f2ace
+bluexad.ai, 1996418805747683328, RESELLER
+video.unrulymedia.com, 905340553, RESELLER
+pubnative.net, 1017792, RESELLER, d641df8625486a7b
