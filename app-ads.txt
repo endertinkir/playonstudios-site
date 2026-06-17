@@ -500,3 +500,6 @@ pubmatic.com, 165329, RESELLER, 5d62403b186f2ace
 bluexad.ai, 1996418805747683328, RESELLER
 video.unrulymedia.com, 905340553, RESELLER
 pubnative.net, 1017792, RESELLER, d641df8625486a7b
+openx.com, 563905670, RESELLER, 6a698e2ec38604c6
+triplelift.com, 14798, RESELLER, 6c33edb13117fd86
+pubmatic.com, 165854, RESELLER, 5d62403b186f2ace
