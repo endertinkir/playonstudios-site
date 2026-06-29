@@ -1768,7 +1768,7 @@ function getUserTableColumns(view, scope = state.userTableScope) {
 
   if (view === "monetization") {
     return [
-      common.userId, common.platform, common.country, common.build,
+      common.userId, common.platform, common.country, common.build, common.level,
       { label: `${adLabelPrefix}Ad Revenue`, num: true, render: (u) => formatAdRevenue(u.ads.totalRevenue) },
       { label: `${adLabelPrefix}Paid Events`, num: true, render: (u) => formatNumber(u.ads.totalPaidImpressions) },
       { label: `${adLabelPrefix}Ad Watches`, num: true, render: (u) => formatNumber(u.ads.totalWatchCount) },
