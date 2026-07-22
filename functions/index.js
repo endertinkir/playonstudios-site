@@ -37,6 +37,14 @@ exports.rollupUserDailyAdMetrics = onDocumentWritten(
     const deltas = buildPositiveDeltas(before, after);
 
     if (!deltas.hasPositiveDelta) return null;
+    if (isLegacyMigrationAdBaseline(event.data.before.exists, before, after, deltas)) {
+      logger.info("Skipped legacy migration ad metric baseline", {
+        userId,
+        date: dateKeyForEvent(event.time),
+        legacyUid: after.legacyUid || null
+      });
+      return null;
+    }
 
     const eventDate = dateKeyForEvent(event.time);
     const platform = normalizePlatform(after.lastSeenPlatform);
@@ -116,6 +124,22 @@ function buildPositiveDeltas(before, after) {
     if (positiveDelta > 0) deltas.hasPositiveDelta = true;
   });
   return deltas;
+}
+
+function isLegacyMigrationAdBaseline(beforeExists, before, after, deltas) {
+  if (!hasLegacyUid(after)) return false;
+  if (!deltas.hasPositiveDelta) return false;
+  if (!beforeExists) return true;
+  if (hasAnyAdMetricField(before)) return false;
+  return hasAnyAdMetricField(after);
+}
+
+function hasLegacyUid(payload = {}) {
+  return typeof payload.legacyUid === "string" && payload.legacyUid.trim().length > 0;
+}
+
+function hasAnyAdMetricField(payload = {}) {
+  return AD_DELTA_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(payload, field));
 }
 
 function dateKeyForEvent(eventTime) {

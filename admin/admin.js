@@ -692,6 +692,9 @@ function normalizeUserDailyAdMetric(id, payload = {}) {
     segment: payload.segment || "beginner",
     level: readNumber(payload.level),
     powerUses: readNumber(payload.powerUses),
+    excludedFromDashboard: payload.excludedFromDashboard === true,
+    excludedReason: payload.excludedReason || "",
+    excludedAt: parseDate(payload.excludedAt),
     ads: normalizeUserAdStats(payload)
   };
 }
@@ -974,20 +977,30 @@ function getMetricsInRange(bounds) {
 }
 
 function getUserDailyAdMetricsInRange(bounds = getRangeBounds()) {
+  return state.userDailyAdMetrics.filter((m) =>
+    !m.excludedFromDashboard && isUserDailyAdMetricInCurrentScope(m, bounds)
+  );
+}
+
+function getExcludedUserDailyAdMetricsInRange(bounds = getRangeBounds()) {
+  return state.userDailyAdMetrics.filter((m) =>
+    m.excludedFromDashboard && isUserDailyAdMetricInCurrentScope(m, bounds)
+  );
+}
+
+function isUserDailyAdMetricInCurrentScope(metric, bounds) {
   const p = els.platformFilter.value;
   const c = els.countryFilter ? els.countryFilter.value : "all";
   const b = els.buildFilter ? els.buildFilter.value : "all";
   const seg = els.segmentFilter.value;
   const segmentScoped = ["whale", "pro", "casual", "beginner"].includes(seg);
-  return state.userDailyAdMetrics.filter((m) => {
-    if (!isDateInRange(m.date, bounds)) return false;
-    if (!isMetricInInstallCohort(m)) return false;
-    if (p !== "all" && m.lastSeenPlatform !== p) return false;
-    if (c !== "all" && m.country !== c) return false;
-    if (b !== "all" && m.buildNumber !== b) return false;
-    if (segmentScoped && m.segment !== seg) return false;
-    return true;
-  });
+  if (!isDateInRange(metric.date, bounds)) return false;
+  if (!isMetricInInstallCohort(metric)) return false;
+  if (p !== "all" && metric.lastSeenPlatform !== p) return false;
+  if (c !== "all" && metric.country !== c) return false;
+  if (b !== "all" && metric.buildNumber !== b) return false;
+  if (segmentScoped && metric.segment !== seg) return false;
+  return true;
 }
 
 function isMetricInInstallCohort(metric) {
@@ -1034,6 +1047,7 @@ function renderFilterContext(active, scoped) {
   const platform = els.platformFilter.value;
   const country = els.countryFilter ? els.countryFilter.value : "all";
   const segment = els.segmentFilter.value;
+  const excludedAdRows = getExcludedUserDailyAdMetricsInRange(bounds).length;
   const chips = [
     { label: "Event window", value: formatRangeLabel(bounds) },
     { label: "Install cohort", value: installBounds ? formatRangeLabel(installBounds) : "All installs" },
@@ -1045,6 +1059,9 @@ function renderFilterContext(active, scoped) {
     { label: "Build", value: build === "all" ? "All" : (build === "unknown" ? "Unknown" : build) },
     { label: "Cohort", value: segmentFilterLabel(segment) }
   ];
+  if (excludedAdRows > 0) {
+    chips.push({ label: "Excluded ad baselines", value: formatNumber(excludedAdRows) });
+  }
 
   els.filterContext.innerHTML = chips.map((chip) => `
     <span class="scope-pill">
